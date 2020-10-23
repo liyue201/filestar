@@ -131,6 +131,10 @@ type FullNodeStruct struct {
 		MpoolGetNonce    func(context.Context, address.Address) (uint64, error)                                    `perm:"read"`
 		MpoolSub         func(context.Context) (<-chan api.MpoolUpdate, error)                                     `perm:"read"`
 
+		MpoolBatchPush          func(ctx context.Context, smsgs []*types.SignedMessage) ([]cid.Cid, error)                                  `perm:"write"`
+		MpoolBatchPushUntrusted func(ctx context.Context, smsgs []*types.SignedMessage) ([]cid.Cid, error)                                  `perm:"write"`
+		MpoolBatchPushMessage   func(ctx context.Context, msgs []*types.Message, spec *api.MessageSendSpec) ([]*types.SignedMessage, error) `perm:"sign"`
+
 		MinerGetBaseInfo func(context.Context, address.Address, abi.ChainEpoch, types.TipSetKey) (*api.MiningBaseInfo, error) `perm:"read"`
 		MinerCreateBlock func(context.Context, *api.BlockTemplate) (*types.BlockMsg, error)                                   `perm:"write"`
 
@@ -156,6 +160,7 @@ type FullNodeStruct struct {
 		ClientMinerQueryOffer                     func(ctx context.Context, miner address.Address, root cid.Cid, piece *cid.Cid) (api.QueryOffer, error)            `perm:"read"`
 		ClientStartDeal                           func(ctx context.Context, params *api.StartDealParams) (*cid.Cid, error)                                          `perm:"admin"`
 		ClientGetDealInfo                         func(context.Context, cid.Cid) (*api.DealInfo, error)                                                             `perm:"read"`
+		ClientGetDealStatus                       func(context.Context, uint64) (string, error)                                                                     `perm:"read"`
 		ClientListDeals                           func(ctx context.Context) ([]api.DealInfo, error)                                                                 `perm:"write"`
 		ClientGetDealUpdates                      func(ctx context.Context) (<-chan api.DealInfo, error)                                                            `perm:"read"`
 		ClientRetrieve                            func(ctx context.Context, order api.RetrievalOrder, ref *api.FileRef) error                                       `perm:"admin"`
@@ -516,6 +521,10 @@ func (c *FullNodeStruct) ClientGetDealInfo(ctx context.Context, deal cid.Cid) (*
 	return c.Internal.ClientGetDealInfo(ctx, deal)
 }
 
+func (c *FullNodeStruct) ClientGetDealStatus(ctx context.Context, statusCode uint64) (string, error) {
+	return c.Internal.ClientGetDealStatus(ctx, statusCode)
+}
+
 func (c *FullNodeStruct) ClientListDeals(ctx context.Context) ([]api.DealInfo, error) {
 	return c.Internal.ClientListDeals(ctx)
 }
@@ -609,6 +618,18 @@ func (c *FullNodeStruct) MpoolPushUntrusted(ctx context.Context, smsg *types.Sig
 
 func (c *FullNodeStruct) MpoolPushMessage(ctx context.Context, msg *types.Message, spec *api.MessageSendSpec) (*types.SignedMessage, error) {
 	return c.Internal.MpoolPushMessage(ctx, msg, spec)
+}
+
+func (c *FullNodeStruct) MpoolBatchPush(ctx context.Context, smsgs []*types.SignedMessage) ([]cid.Cid, error) {
+	return c.Internal.MpoolBatchPush(ctx, smsgs)
+}
+
+func (c *FullNodeStruct) MpoolBatchPushUntrusted(ctx context.Context, smsgs []*types.SignedMessage) ([]cid.Cid, error) {
+	return c.Internal.MpoolBatchPushUntrusted(ctx, smsgs)
+}
+
+func (c *FullNodeStruct) MpoolBatchPushMessage(ctx context.Context, msgs []*types.Message, spec *api.MessageSendSpec) ([]*types.SignedMessage, error) {
+	return c.Internal.MpoolBatchPushMessage(ctx, msgs, spec)
 }
 
 func (c *FullNodeStruct) MpoolSub(ctx context.Context) (<-chan api.MpoolUpdate, error) {
