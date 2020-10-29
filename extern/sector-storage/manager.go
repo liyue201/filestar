@@ -79,7 +79,6 @@ type Manager struct {
 
 	storage.Prover
 
-	workerUrl       sync.Map
 	sectorPreWorker sync.Map
 }
 
@@ -190,10 +189,8 @@ func (m *Manager) AddWorker(ctx context.Context, w Worker) error {
 
 	log.Infof("worker info: %+v", info)
 
-	url, ok := ctx.Value("url").(string)
-	if ok {
-		m.workerUrl.Store(w, url)
-	}
+	url, _ := ctx.Value(WorkerUrlKey).(string)
+
 	m.sched.newWorkers <- &workerHandle{
 		w:   w,
 		url: url,
@@ -349,7 +346,8 @@ func (m *Manager) AddPiece(ctx context.Context, sector abi.SectorID, existingPie
 		}
 		out = p
 		if m.sc.UsePreWorkerP1P2 {
-			if url, ok := m.workerUrl.Load(w); ok {
+			workerUrl := ctx.Value(WorkerUrlKey)
+			if url, ok := workerUrl.(string); ok {
 				m.sectorPreWorker.Store(sector.Number, url)
 			}
 		}
@@ -385,7 +383,8 @@ func (m *Manager) SealPreCommit1(ctx context.Context, sector abi.SectorID, ticke
 		}
 		out = p
 		if m.sc.UsePreWorkerP1P2 {
-			if url, ok := m.workerUrl.Load(w); ok {
+			workerUrl := ctx.Value(WorkerUrlKey)
+			if url, ok := workerUrl.(string); ok {
 				m.sectorPreWorker.Store(sector.Number, url)
 			}
 		}

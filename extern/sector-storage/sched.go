@@ -27,6 +27,10 @@ var (
 	SchedWindows = 2
 )
 
+const (
+	WorkerUrlKey = "workerUrl"
+)
+
 func getPriority(ctx context.Context) int {
 	sp := ctx.Value(SchedPriorityKey)
 	if p, ok := sp.(int); ok {
@@ -721,7 +725,8 @@ func (sh *scheduler) assignWorker(taskDone chan struct{}, wid WorkerID, w *worke
 			case <-sh.closing:
 			}
 
-			err = req.work(req.ctx, w.wt.worker(w.w))
+			ctx := context.WithValue(req.ctx, WorkerUrlKey, w.url)
+			err = req.work(ctx, w.wt.worker(w.w))
 
 			select {
 			case req.ret <- workerResponse{err: err}:
