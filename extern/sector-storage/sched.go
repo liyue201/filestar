@@ -79,6 +79,8 @@ type scheduler struct {
 type workerHandle struct {
 	w Worker
 
+	url string
+
 	info storiface.WorkerInfo
 
 	preparing *activeResources
@@ -88,6 +90,8 @@ type workerHandle struct {
 
 	wndLk         sync.Mutex
 	activeWindows []*schedWindow
+
+	globalTaskLimitPerWorker int
 
 	// stats / tracking
 	wt *workTracker

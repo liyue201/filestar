@@ -37,6 +37,10 @@ type StorageMiner struct {
 	Fees       MinerFeeConfig
 }
 
+type StorageWorker struct {
+	Storage sectorstorage.SealerConfig
+}
+
 type DealmakingConfig struct {
 	ConsiderOnlineStorageDeals    bool
 	ConsiderOfflineStorageDeals   bool
@@ -170,6 +174,8 @@ func DefaultStorageMiner() *StorageMiner {
 			// Default to 10 - tcp should still be able to figure this out, and
 			// it's the ratio between 10gbit / 1gbit
 			ParallelFetchLimit: 10,
+			UsePreWorkerP1P2:   true,
+			TaskLimitPerWorker: 3,
 		},
 
 		Dealmaking: DealmakingConfig{
@@ -192,6 +198,24 @@ func DefaultStorageMiner() *StorageMiner {
 	}
 	cfg.Common.API.ListenAddress = "/ip4/127.0.0.1/tcp/2345/http"
 	cfg.Common.API.RemoteListenAddress = "127.0.0.1:2345"
+	return cfg
+}
+
+func DefaultStorageWorker() *StorageWorker {
+	cfg := &StorageWorker{
+
+		Storage: sectorstorage.SealerConfig{
+			AllowAddPiece:   true,
+			AllowPreCommit1: true,
+			AllowPreCommit2: true,
+			AllowCommit:     true,
+			AllowUnseal:     true,
+			// Default to 10 - tcp should still be able to figure this out, and
+			// it's the ratio between 10gbit / 1gbit
+			ParallelFetchLimit: 10,
+			TaskLimitPerWorker: 3,
+		},
+	}
 	return cfg
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sync"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-cid"
@@ -58,12 +59,15 @@ type SectorManager interface {
 	ffiwrapper.StorageSealer
 	storage.Prover
 	FaultTracker
+
+	CanAddPiece() bool
 }
 
 type WorkerID uint64
 
 type Manager struct {
 	scfg *ffiwrapper.Config
+	sc   SealerConfig
 
 	ls         stores.LocalStorage
 	storage    *stores.Remote
@@ -74,6 +78,9 @@ type Manager struct {
 	sched *scheduler
 
 	storage.Prover
+
+	workerUrl  sync.Map
+	preWorkers sync.Map
 }
 
 type SealerConfig struct {
@@ -85,6 +92,12 @@ type SealerConfig struct {
 	AllowPreCommit2 bool
 	AllowCommit     bool
 	AllowUnseal     bool
+
+	// Use the previous worker in the p1 p2 phase
+	UsePreWorkerP1P2 bool
+
+	// Limit the task number of a worker
+	TaskLimitPerWorker int
 }
 
 type StorageAuth http.Header
@@ -95,7 +108,7 @@ func New(ctx context.Context, ls stores.LocalStorage, si stores.SectorIndex, cfg
 		return nil, err
 	}
 
-	prover, err := ffiwrapper.New(&readonlyProvider{stor: lstor, index: si, spt: cfg.SealProofType}, cfg)
+	prover, err := ffiwrapper.New(&readonlyProvider{stor: lstor, index: si}, cfg)
 	if err != nil {
 		return nil, xerrors.Errorf("creating prover instance: %w", err)
 	}
@@ -103,8 +116,8 @@ func New(ctx context.Context, ls stores.LocalStorage, si stores.SectorIndex, cfg
 	stor := stores.NewRemote(lstor, si, http.Header(sa), sc.ParallelFetchLimit)
 
 	m := &Manager{
-		scfg: cfg,
-
+		scfg:       cfg,
+		sc:         sc,
 		ls:         ls,
 		storage:    stor,
 		localStore: lstor,
@@ -140,6 +153,9 @@ func New(ctx context.Context, ls stores.LocalStorage, si stores.SectorIndex, cfg
 	err = m.AddWorker(ctx, NewLocalWorker(WorkerConfig{
 		SealProof: cfg.SealProofType,
 		TaskTypes: localTasks,
+		GetTaskLimitFunc: func() int {
+			return sc.TaskLimitPerWorker
+		},
 	}, stor, lstor, si))
 	if err != nil {
 		return nil, xerrors.Errorf("adding local worker: %w", err)
@@ -172,14 +188,23 @@ func (m *Manager) AddWorker(ctx context.Context, w Worker) error {
 		return xerrors.Errorf("getting worker info: %w", err)
 	}
 
+	log.Infof("worker info: %+v", info)
+
+	url, ok := ctx.Value("url").(string)
+	if ok {
+		m.workerUrl.Store(w, url)
+	}
 	m.sched.newWorkers <- &workerHandle{
-		w: w,
+		w:   w,
+		url: url,
 		wt: &workTracker{
 			running: map[uint64]storiface.WorkerJob{},
 		},
-		info:      info,
-		preparing: &activeResources{},
-		active:    &activeResources{},
+
+		info:                     info,
+		preparing:                &activeResources{},
+		active:                   &activeResources{},
+		globalTaskLimitPerWorker: m.sc.TaskLimitPerWorker,
 	}
 	return nil
 }
@@ -323,6 +348,11 @@ func (m *Manager) AddPiece(ctx context.Context, sector abi.SectorID, existingPie
 			return err
 		}
 		out = p
+		if m.sc.UsePreWorkerP1P2 {
+			if url, ok := m.workerUrl.Load(w); ok {
+				m.preWorkers.Store(sector.Number, url)
+			}
+		}
 		return nil
 	})
 
@@ -339,7 +369,13 @@ func (m *Manager) SealPreCommit1(ctx context.Context, sector abi.SectorID, ticke
 
 	// TODO: also consider where the unsealed data sits
 
-	selector := newAllocSelector(m.index, stores.FTCache|stores.FTSealed, stores.PathSealing)
+	var selector WorkerSelector
+	preWorkerUrl, ok := m.preWorkers.Load(sector.Number)
+	if ok {
+		selector = newPreWorkSelector(preWorkerUrl.(string))
+	} else {
+		selector = newAllocSelector(m.index, stores.FTCache|stores.FTSealed, stores.PathSealing)
+	}
 
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTPreCommit1, selector, schedFetch(sector, stores.FTUnsealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 		p, err := w.SealPreCommit1(ctx, sector, ticket, pieces)
@@ -347,6 +383,11 @@ func (m *Manager) SealPreCommit1(ctx context.Context, sector abi.SectorID, ticke
 			return err
 		}
 		out = p
+		if m.sc.UsePreWorkerP1P2 {
+			if url, ok := m.workerUrl.Load(w); ok {
+				m.preWorkers.Store(sector.Number, url)
+			}
+		}
 		return nil
 	})
 
@@ -361,14 +402,20 @@ func (m *Manager) SealPreCommit2(ctx context.Context, sector abi.SectorID, phase
 		return storage.SectorCids{}, xerrors.Errorf("acquiring sector lock: %w", err)
 	}
 
-	selector := newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, true)
-
+	var selector WorkerSelector
+	preWorkerUrl, ok := m.preWorkers.Load(sector.Number)
+	if ok {
+		selector = newPreWorkSelector(preWorkerUrl.(string))
+	} else {
+		selector = newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, true)
+	}
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTPreCommit2, selector, schedFetch(sector, stores.FTCache|stores.FTSealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 		p, err := w.SealPreCommit2(ctx, sector, phase1Out)
 		if err != nil {
 			return err
 		}
 		out = p
+		m.preWorkers.Delete(sector.Number)
 		return nil
 	})
 	return out, err
@@ -516,6 +563,12 @@ func (m *Manager) SchedDiag(ctx context.Context) (interface{}, error) {
 
 func (m *Manager) Close(ctx context.Context) error {
 	return m.sched.Close(ctx)
+}
+
+func (m *Manager) CanAddPiece() bool {
+	taskLimit, taskCount := m.taskCountAndLimitOf([]sealtasks.TaskType{sealtasks.TTAddPiece, sealtasks.TTPreCommit1, sealtasks.TTPreCommit2})
+	log.Infof("taskLimit:%v, taskCount:%v", taskLimit, taskCount)
+	return taskCount < taskLimit
 }
 
 var _ SectorManager = &Manager{}

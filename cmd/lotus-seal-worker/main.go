@@ -37,6 +37,7 @@ import (
 	"github.com/filecoin-project/lotus/lib/lotuslog"
 	"github.com/filecoin-project/lotus/lib/rpcenc"
 	"github.com/filecoin-project/lotus/metrics"
+	"github.com/filecoin-project/lotus/node/config"
 	"github.com/filecoin-project/lotus/node/repo"
 )
 
@@ -356,12 +357,12 @@ var runCmd = &cli.Command{
 		remote := stores.NewRemote(localStore, nodeApi, sminfo.AuthHeader(), cctx.Int("parallel-fetch-limit"))
 
 		// Create / expose the worker
-
 		workerApi := &worker{
 			LocalWorker: sectorstorage.NewLocalWorker(sectorstorage.WorkerConfig{
-				SealProof: spt,
-				TaskTypes: taskTypes,
-				NoSwap:    cctx.Bool("no-swap"),
+				SealProof:        spt,
+				TaskTypes:        taskTypes,
+				NoSwap:           cctx.Bool("no-swap"),
+				GetTaskLimitFunc: readTaskLimitFunc(lr),
 			}, remote, localStore, nodeApi),
 			localStore: localStore,
 			ls:         lr,
@@ -518,4 +519,22 @@ func extractRoutableIP(timeout time.Duration) (string, error) {
 	localAddr := conn.LocalAddr().(*net.TCPAddr)
 
 	return strings.Split(localAddr.IP.String(), ":")[0], nil
+}
+
+func readConfigFunc(lr repo.LockedRepo) func() *config.StorageWorker {
+	return func() *config.StorageWorker {
+		wconf, err := lr.Config()
+		if err != nil {
+			log.Infof("worker config error: %+v", err)
+			return config.DefaultStorageWorker()
+		}
+		log.Infof("worker config: %+v", wconf)
+		return wconf.(*config.StorageWorker)
+	}
+}
+
+func readTaskLimitFunc(lr repo.LockedRepo) func() int {
+	return func() int {
+		return readConfigFunc(lr)().Storage.TaskLimitPerWorker
+	}
 }

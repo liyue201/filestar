@@ -2,6 +2,7 @@ package sealing
 
 import (
 	"context"
+	"time"
 
 	"golang.org/x/xerrors"
 
@@ -79,5 +80,29 @@ func (m *Sealing) PledgeSector() error {
 			return
 		}
 	}()
+	return nil
+}
+
+func (m *Sealing) RunPledgeSectors(ctx context.Context) error {
+	timer := time.NewTimer(time.Minute)
+	for {
+		select {
+		case <-timer.C:
+			for m.sealer.CanAddPiece() {
+				if m.PledgeSector() != nil {
+					break
+				}
+				wait := time.After(time.Second * 5)
+				select {
+				case <-wait:
+				case <-ctx.Done():
+					return nil
+				}
+			}
+			timer.Reset(time.Minute * 10)
+		case <-ctx.Done():
+			return nil
+		}
+	}
 	return nil
 }

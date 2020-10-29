@@ -2,14 +2,13 @@ package sectorstorage
 
 import (
 	"context"
-	"io"
-	"os"
-	"runtime"
-
 	"github.com/elastic/go-sysinfo"
 	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-cid"
 	"golang.org/x/xerrors"
+	"io"
+	"os"
+	"runtime"
 
 	ffi "github.com/filecoin-project/filecoin-ffi"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -24,9 +23,10 @@ import (
 var pathTypes = []stores.SectorFileType{stores.FTUnsealed, stores.FTSealed, stores.FTCache}
 
 type WorkerConfig struct {
-	SealProof abi.RegisteredSealProof
-	TaskTypes []sealtasks.TaskType
-	NoSwap    bool
+	SealProof        abi.RegisteredSealProof
+	TaskTypes        []sealtasks.TaskType
+	NoSwap           bool
+	GetTaskLimitFunc func() int
 }
 
 type LocalWorker struct {
@@ -37,6 +37,8 @@ type LocalWorker struct {
 	noSwap     bool
 
 	acceptTasks map[sealtasks.TaskType]struct{}
+
+	getTaskLimitFunc func() int
 }
 
 func NewLocalWorker(wcfg WorkerConfig, store stores.Store, local *stores.Local, sindex stores.SectorIndex) *LocalWorker {
@@ -54,7 +56,8 @@ func NewLocalWorker(wcfg WorkerConfig, store stores.Store, local *stores.Local, 
 		sindex:     sindex,
 		noSwap:     wcfg.NoSwap,
 
-		acceptTasks: acceptTasks,
+		acceptTasks:      acceptTasks,
+		getTaskLimitFunc: wcfg.GetTaskLimitFunc,
 	}
 }
 
@@ -300,6 +303,7 @@ func (l *LocalWorker) Info(context.Context) (storiface.WorkerInfo, error) {
 			CPUs:        uint64(runtime.NumCPU()),
 			GPUs:        gpus,
 		},
+		TaskLimit: l.getTaskLimitFunc(),
 	}, nil
 }
 
