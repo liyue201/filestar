@@ -79,8 +79,8 @@ type Manager struct {
 
 	storage.Prover
 
-	workerUrl  sync.Map
-	preWorkers sync.Map
+	workerUrl       sync.Map
+	sectorPreWorker sync.Map
 }
 
 type SealerConfig struct {
@@ -350,7 +350,7 @@ func (m *Manager) AddPiece(ctx context.Context, sector abi.SectorID, existingPie
 		out = p
 		if m.sc.UsePreWorkerP1P2 {
 			if url, ok := m.workerUrl.Load(w); ok {
-				m.preWorkers.Store(sector.Number, url)
+				m.sectorPreWorker.Store(sector.Number, url)
 			}
 		}
 		return nil
@@ -370,12 +370,13 @@ func (m *Manager) SealPreCommit1(ctx context.Context, sector abi.SectorID, ticke
 	// TODO: also consider where the unsealed data sits
 
 	var selector WorkerSelector
-	preWorkerUrl, ok := m.preWorkers.Load(sector.Number)
+	preWorkerUrl, ok := m.sectorPreWorker.Load(sector.Number)
 	if ok {
 		selector = newPreWorkSelector(preWorkerUrl.(string))
 	} else {
 		selector = newAllocSelector(m.index, stores.FTCache|stores.FTSealed, stores.PathSealing)
 	}
+	log.Infof("sectorId: %v, ok: %v, url: %v", sector.Number, ok, preWorkerUrl)
 
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTPreCommit1, selector, schedFetch(sector, stores.FTUnsealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 		p, err := w.SealPreCommit1(ctx, sector, ticket, pieces)
@@ -385,7 +386,7 @@ func (m *Manager) SealPreCommit1(ctx context.Context, sector abi.SectorID, ticke
 		out = p
 		if m.sc.UsePreWorkerP1P2 {
 			if url, ok := m.workerUrl.Load(w); ok {
-				m.preWorkers.Store(sector.Number, url)
+				m.sectorPreWorker.Store(sector.Number, url)
 			}
 		}
 		return nil
@@ -403,19 +404,20 @@ func (m *Manager) SealPreCommit2(ctx context.Context, sector abi.SectorID, phase
 	}
 
 	var selector WorkerSelector
-	preWorkerUrl, ok := m.preWorkers.Load(sector.Number)
+	preWorkerUrl, ok := m.sectorPreWorker.Load(sector.Number)
 	if ok {
 		selector = newPreWorkSelector(preWorkerUrl.(string))
 	} else {
 		selector = newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, true)
 	}
+	log.Infof("sectorId: %v, ok: %v, url: %v", sector.Number, ok, preWorkerUrl)
+
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTPreCommit2, selector, schedFetch(sector, stores.FTCache|stores.FTSealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 		p, err := w.SealPreCommit2(ctx, sector, phase1Out)
 		if err != nil {
 			return err
 		}
 		out = p
-		m.preWorkers.Delete(sector.Number)
 		return nil
 	})
 	return out, err
@@ -424,6 +426,8 @@ func (m *Manager) SealPreCommit2(ctx context.Context, sector abi.SectorID, phase
 func (m *Manager) SealCommit1(ctx context.Context, sector abi.SectorID, ticket abi.SealRandomness, seed abi.InteractiveSealRandomness, pieces []abi.PieceInfo, cids storage.SectorCids) (out storage.Commit1Out, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	m.sectorPreWorker.Delete(sector.Number)
 
 	if err := m.index.StorageLock(ctx, sector, stores.FTSealed, stores.FTCache); err != nil {
 		return storage.Commit1Out{}, xerrors.Errorf("acquiring sector lock: %w", err)
