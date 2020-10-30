@@ -42,6 +42,9 @@ func (m *Sealing) PledgeSector() error {
 			return xerrors.Errorf("too many sectors sealing (curSealing: %d, max: %d)", m.stats.curSealing(), cfg.MaxSealingSectors)
 		}
 	}
+	if m.sealer.CanAddPiece() {
+		return xerrors.Errorf("too many sectors sealing, out off task limit")
+	}
 
 	go func() {
 		ctx := context.TODO() // we can't use the context from command which invokes
@@ -93,8 +96,8 @@ func (m *Sealing) RunPledgeSectors(ctx context.Context) error {
 				log.Infof("%v, conf: %+v", err, cfg)
 				break
 			}
-			for m.sealer.CanAddPiece() {
-				if m.PledgeSector() != nil {
+			for {
+				if err := m.PledgeSector(); err != nil {
 					break
 				}
 				wait := time.After(time.Second * 5)
