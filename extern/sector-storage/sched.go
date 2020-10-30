@@ -449,18 +449,25 @@ func (sh *scheduler) trySched() {
 			taskAssigned := worker.taskCount()
 			taskTodo := len(windows[wid].todo)
 
-			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskAssigned:%v, usePre:%v", wid, task.taskType, taskAssigned, taskTodo, sh.usePreWorkerP1P2)
+			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskTodo:%v, usePre:%v", wid, task.taskType, taskAssigned, taskTodo, sh.usePreWorkerP1P2)
 
 			if sh.usePreWorkerP1P2 {
 				if task.taskType == sealtasks.TTPreCommit1 || task.taskType == sealtasks.TTPreCommit2 {
-					preWorkerUrl, _ := sh.sectorPreWorker.Load(task.sector.Number)
-					if preWorkerUrl != worker.url {
-						continue
+					preWorkerUrl, ok := sh.sectorPreWorker.Load(task.sector.Number)
+					if !ok {
+						log.Debugf("can not found preWorkerUrl")
+					} else {
+						if preWorkerUrl != worker.url {
+							log.Debugf("preWorkerUrl: %v , %v", preWorkerUrl, worker.url)
+							continue
+						}
 					}
-				} else if taskAssigned+taskTodo >= worker.taskLimit() {
+				} else if limit := worker.taskLimit(); taskAssigned+taskTodo >= limit {
+					log.Debugf("out of taskLimit: %v", limit)
 					continue
 				}
-			} else if taskAssigned+taskTodo >= worker.taskLimit() {
+			} else if limit := worker.taskLimit(); taskAssigned+taskTodo >= limit {
+				log.Debugf("out of taskLimit: %v", limit)
 				continue
 			}
 
