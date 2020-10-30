@@ -447,7 +447,7 @@ func (sh *scheduler) trySched() {
 
 			worker := sh.workers[wid]
 			taskAssigned := worker.taskCount()
-			taskTodo := len(windows[wid].todo)
+			taskTodo := len(windows[wnd].todo)
 			taskCount := taskAssigned + taskTodo
 
 			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskTodo:%v, usePre:%v", wid, task.taskType, taskAssigned, taskTodo, sh.usePreWorkerP1P2)
