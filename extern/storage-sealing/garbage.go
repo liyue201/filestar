@@ -2,6 +2,7 @@ package sealing
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"golang.org/x/xerrors"
@@ -43,7 +44,7 @@ func (m *Sealing) PledgeSector() error {
 		}
 	}
 	if !m.sealer.CanAddPiece() {
-		return xerrors.Errorf("too many sectors sealing, out off task limit")
+		return errors.New("too many sectors sealing, out off task limit")
 	}
 
 	go func() {
