@@ -35,9 +35,6 @@ func (s *existingSelector) Ok(ctx context.Context, task sealtasks.TaskType, spt 
 	if _, supported := tasks[task]; !supported {
 		return false, nil
 	}
-	if whnd.taskCount() >= whnd.taskLimit() {
-		return false, nil
-	}
 
 	paths, err := whnd.w.Paths(ctx)
 	if err != nil {

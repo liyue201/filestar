@@ -522,14 +522,22 @@ func extractRoutableIP(timeout time.Duration) (string, error) {
 }
 
 func readConfigFunc(lr repo.LockedRepo) func() *config.StorageWorker {
+	lastReadAt := time.Now()
+	cacheConf := config.DefaultStorageWorker()
 	return func() *config.StorageWorker {
-		wconf, err := lr.Config()
+		nowtime := time.Now()
+		if lastReadAt.Add(time.Second * 3).After(nowtime) {
+			return cacheConf
+		}
+		conf, err := lr.Config()
 		if err != nil {
 			log.Infof("worker config error: %+v", err)
 			return config.DefaultStorageWorker()
 		}
-		log.Infof("worker config: %+v", wconf)
-		return wconf.(*config.StorageWorker)
+		log.Infof("worker config: %+v", conf)
+		lastReadAt = nowtime
+		cacheConf = conf.(*config.StorageWorker)
+		return cacheConf
 	}
 }
 

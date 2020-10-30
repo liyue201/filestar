@@ -24,9 +24,6 @@ func (s *taskSelector) Ok(ctx context.Context, task sealtasks.TaskType, spt abi.
 	if err != nil {
 		return false, xerrors.Errorf("getting supported worker task types: %w", err)
 	}
-	if whnd.taskCount() >= whnd.taskLimit() {
-		return false, nil
-	}
 
 	_, supported := tasks[task]
 

@@ -33,9 +33,6 @@ func (s *allocSelector) Ok(ctx context.Context, task sealtasks.TaskType, spt abi
 	if _, supported := tasks[task]; !supported {
 		return false, nil
 	}
-	if whnd.taskCount() >= whnd.taskLimit() {
-		return false, nil
-	}
 
 	paths, err := whnd.w.Paths(ctx)
 	if err != nil {
