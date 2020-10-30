@@ -236,6 +236,8 @@ func (sh *scheduler) runSched() {
 	iw := time.After(InitWait)
 	var initialised bool
 
+	ticker := time.NewTicker(time.Minute * 5)
+
 	for {
 		var doSched bool
 
@@ -262,6 +264,8 @@ func (sh *scheduler) runSched() {
 		case <-iw:
 			initialised = true
 			iw = nil
+			doSched = true
+		case <-ticker.C:
 			doSched = true
 		case <-sh.closing:
 			sh.schedClose()
