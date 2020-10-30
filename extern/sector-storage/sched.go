@@ -446,16 +446,21 @@ func (sh *scheduler) trySched() {
 			}
 
 			worker := sh.workers[wid]
+			taskAssigned := worker.taskCount()
+			taskTodo := len(windows[wid].todo)
+
+			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskAssigned:%v, usePre:%v", wid, task.taskType, taskAssigned, taskTodo, sh.usePreWorkerP1P2)
+
 			if sh.usePreWorkerP1P2 {
 				if task.taskType == sealtasks.TTPreCommit1 || task.taskType == sealtasks.TTPreCommit2 {
 					preWorkerUrl, _ := sh.sectorPreWorker.Load(task.sector.Number)
 					if preWorkerUrl != worker.url {
 						continue
 					}
-				} else if worker.taskCount()+len(windows[wid].todo) >= worker.taskLimit() {
+				} else if taskAssigned+taskTodo >= worker.taskLimit() {
 					continue
 				}
-			} else if worker.taskCount()+len(windows[wid].todo) >= worker.taskLimit() {
+			} else if taskAssigned+taskTodo >= worker.taskLimit() {
 				continue
 			}
 
