@@ -448,6 +448,7 @@ func (sh *scheduler) trySched() {
 			worker := sh.workers[wid]
 			taskAssigned := worker.taskCount()
 			taskTodo := len(windows[wid].todo)
+			taskCount := taskAssigned + taskTodo
 
 			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskTodo:%v, usePre:%v", wid, task.taskType, taskAssigned, taskTodo, sh.usePreWorkerP1P2)
 
@@ -456,17 +457,21 @@ func (sh *scheduler) trySched() {
 					preWorkerUrl, ok := sh.sectorPreWorker.Load(task.sector.Number)
 					if !ok {
 						log.Debugf("can not found preWorkerUrl")
+						if limit := worker.taskLimit(); taskCount >= limit {
+							log.Debugf("out of taskLimit: %v", limit)
+							continue
+						}
 					} else {
 						if preWorkerUrl != worker.url {
 							log.Debugf("preWorkerUrl: %v , %v", preWorkerUrl, worker.url)
 							continue
 						}
 					}
-				} else if limit := worker.taskLimit(); taskAssigned+taskTodo >= limit {
+				} else if limit := worker.taskLimit(); taskCount >= limit {
 					log.Debugf("out of taskLimit: %v", limit)
 					continue
 				}
-			} else if limit := worker.taskLimit(); taskAssigned+taskTodo >= limit {
+			} else if limit := worker.taskLimit(); taskCount >= limit {
 				log.Debugf("out of taskLimit: %v", limit)
 				continue
 			}
