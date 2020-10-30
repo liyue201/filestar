@@ -78,6 +78,9 @@ type scheduler struct {
 	closing  chan struct{}
 	closed   chan struct{}
 	testSync chan struct{} // used for testing
+
+	usePreWorkerP1P2 bool
+	sectorPreWorker  sync.Map
 }
 
 type workerHandle struct {
@@ -442,6 +445,20 @@ func (sh *scheduler) trySched() {
 				continue
 			}
 
+			worker := sh.workers[wid]
+			if sh.usePreWorkerP1P2 {
+				if task.taskType == sealtasks.TTPreCommit1 || task.taskType == sealtasks.TTPreCommit2 {
+					preWorkerUrl, _ := sh.sectorPreWorker.Load(task.sector.Number)
+					if preWorkerUrl != worker.url {
+						continue
+					}
+				} else if worker.taskCount()+len(windows[wid].todo) >= worker.taskLimit() {
+					continue
+				}
+			} else if worker.taskCount()+len(windows[wid].todo) >= worker.taskLimit() {
+				continue
+			}
+
 			log.Debugf("SCHED ASSIGNED sqi:%d sector %d task %s to window %d", sqi, task.sector.Number, task.taskType, wnd)
 
 			windows[wnd].allocated.add(wr, needRes)
@@ -725,8 +742,7 @@ func (sh *scheduler) assignWorker(taskDone chan struct{}, wid WorkerID, w *worke
 			case <-sh.closing:
 			}
 
-			ctx := context.WithValue(req.ctx, WorkerUrlKey, w.url)
-			err = req.work(ctx, w.wt.worker(w.w))
+			err = req.work(req.ctx, w.wt.worker(w.w))
 
 			select {
 			case req.ret <- workerResponse{err: err}:
@@ -747,6 +763,13 @@ func (sh *scheduler) assignWorker(taskDone chan struct{}, wid WorkerID, w *worke
 		}
 	}()
 
+	if sh.usePreWorkerP1P2 {
+		if req.taskType == sealtasks.TTAddPiece || req.taskType == sealtasks.TTPreCommit1 {
+			sh.sectorPreWorker.Store(req.sector.Number, w.url)
+		} else {
+			sh.sectorPreWorker.Delete(req.sector.Number)
+		}
+	}
 	return nil
 }
 

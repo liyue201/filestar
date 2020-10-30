@@ -3,15 +3,13 @@ package sectorstorage
 import (
 	"context"
 	"errors"
-	"io"
-	"net/http"
-	"sync"
-
 	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/mitchellh/go-homedir"
 	"golang.org/x/xerrors"
+	"io"
+	"net/http"
 
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/specs-storage/storage"
@@ -78,8 +76,6 @@ type Manager struct {
 	sched *scheduler
 
 	storage.Prover
-
-	sectorPreWorker sync.Map
 }
 
 type SealerConfig struct {
@@ -127,6 +123,7 @@ func New(ctx context.Context, ls stores.LocalStorage, si stores.SectorIndex, cfg
 
 		Prover: prover,
 	}
+	m.sched.usePreWorkerP1P2 = sc.UsePreWorkerP1P2
 
 	go m.sched.runSched()
 
@@ -345,12 +342,6 @@ func (m *Manager) AddPiece(ctx context.Context, sector abi.SectorID, existingPie
 			return err
 		}
 		out = p
-		if m.sc.UsePreWorkerP1P2 {
-			workerUrl := ctx.Value(WorkerUrlKey)
-			if url, ok := workerUrl.(string); ok {
-				m.sectorPreWorker.Store(sector.Number, url)
-			}
-		}
 		return nil
 	})
 
@@ -368,7 +359,7 @@ func (m *Manager) SealPreCommit1(ctx context.Context, sector abi.SectorID, ticke
 	// TODO: also consider where the unsealed data sits
 
 	var selector WorkerSelector
-	preWorkerUrl, ok := m.sectorPreWorker.Load(sector.Number)
+	preWorkerUrl, ok := m.sched.sectorPreWorker.Load(sector.Number)
 	if ok {
 		selector = newPreWorkSelector(preWorkerUrl.(string))
 	} else {
@@ -382,12 +373,6 @@ func (m *Manager) SealPreCommit1(ctx context.Context, sector abi.SectorID, ticke
 			return err
 		}
 		out = p
-		if m.sc.UsePreWorkerP1P2 {
-			workerUrl := ctx.Value(WorkerUrlKey)
-			if url, ok := workerUrl.(string); ok {
-				m.sectorPreWorker.Store(sector.Number, url)
-			}
-		}
 		return nil
 	})
 
@@ -403,7 +388,7 @@ func (m *Manager) SealPreCommit2(ctx context.Context, sector abi.SectorID, phase
 	}
 
 	var selector WorkerSelector
-	preWorkerUrl, ok := m.sectorPreWorker.Load(sector.Number)
+	preWorkerUrl, ok := m.sched.sectorPreWorker.Load(sector.Number)
 	if ok {
 		selector = newPreWorkSelector(preWorkerUrl.(string))
 	} else {
@@ -425,8 +410,6 @@ func (m *Manager) SealPreCommit2(ctx context.Context, sector abi.SectorID, phase
 func (m *Manager) SealCommit1(ctx context.Context, sector abi.SectorID, ticket abi.SealRandomness, seed abi.InteractiveSealRandomness, pieces []abi.PieceInfo, cids storage.SectorCids) (out storage.Commit1Out, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	m.sectorPreWorker.Delete(sector.Number)
 
 	if err := m.index.StorageLock(ctx, sector, stores.FTSealed, stores.FTCache); err != nil {
 		return storage.Commit1Out{}, xerrors.Errorf("acquiring sector lock: %w", err)
