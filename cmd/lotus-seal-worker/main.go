@@ -542,7 +542,8 @@ func readConfigFunc(lr repo.LockedRepo) func() *config.StorageWorker {
 }
 
 func readTaskLimitFunc(lr repo.LockedRepo) func() int {
+	f := readConfigFunc(lr)
 	return func() int {
-		return readConfigFunc(lr)().Storage.TaskLimitPerWorker
+		return f().Storage.TaskLimitPerWorker
 	}
 }
