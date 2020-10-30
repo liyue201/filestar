@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -523,11 +524,17 @@ func extractRoutableIP(timeout time.Duration) (string, error) {
 
 func readConfigFunc(lr repo.LockedRepo) func() *config.StorageWorker {
 	lastReadAt := time.Now()
-	cacheConf := config.DefaultStorageWorker()
+	var cacheConf *config.StorageWorker
+	mutex := sync.Mutex{}
 	return func() *config.StorageWorker {
+		mutex.Lock()
+		defer mutex.Unlock()
+
 		nowtime := time.Now()
-		if lastReadAt.Add(time.Second * 3).After(nowtime) {
-			return cacheConf
+		if cacheConf != nil {
+			if lastReadAt.Add(time.Second * 3).After(nowtime) {
+				return cacheConf
+			}
 		}
 		conf, err := lr.Config()
 		if err != nil {

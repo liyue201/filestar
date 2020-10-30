@@ -688,9 +688,11 @@ func NewSetSealConfigFunc(r repo.LockedRepo) (dtypes.SetSealingConfigFunc, error
 	return func(cfg sealiface.Config) (err error) {
 		err = mutateCfg(r, func(c *config.StorageMiner) {
 			c.Sealing = config.SealingConfig{
-				MaxWaitDealsSectors: cfg.MaxWaitDealsSectors,
-				MaxSealingSectors:   cfg.MaxSealingSectors,
-				WaitDealsDelay:      config.Duration(cfg.WaitDealsDelay),
+				MaxWaitDealsSectors:      cfg.MaxWaitDealsSectors,
+				MaxSealingSectors:        cfg.MaxSealingSectors,
+				WaitDealsDelay:           config.Duration(cfg.WaitDealsDelay),
+				AutoPledgeSector:         cfg.AutoPledgeSector,
+				AutoPledgeSectorInterval: cfg.AutoPledgeSectorInterval,
 			}
 		})
 		return
@@ -705,6 +707,7 @@ func NewGetSealConfigFunc(r repo.LockedRepo) (dtypes.GetSealingConfigFunc, error
 				MaxSealingSectors:         cfg.Sealing.MaxSealingSectors,
 				MaxSealingSectorsForDeals: cfg.Sealing.MaxSealingSectorsForDeals,
 				WaitDealsDelay:            time.Duration(cfg.Sealing.WaitDealsDelay),
+				AutoPledgeSector:          cfg.Sealing.AutoPledgeSector,
 			}
 		})
 		return

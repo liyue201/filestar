@@ -15,4 +15,9 @@ type Config struct {
 	MaxSealingSectorsForDeals uint64
 
 	WaitDealsDelay time.Duration
+
+	AutoPledgeSector bool
+
+	// in minute
+	AutoPledgeSectorInterval uint64
 }
