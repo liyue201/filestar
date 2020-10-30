@@ -433,6 +433,14 @@ func (sh *scheduler) trySched() {
 	// Step 2
 	scheduled := 0
 
+	taskToBeAssignedCount := make(map[WorkerID]int)
+	getTaskToBeAssigned := func(wid WorkerID) int {
+		if count, ok := taskToBeAssignedCount[wid]; ok {
+			return count
+		}
+		return 0
+	}
+
 	for sqi := 0; sqi < sh.schedQueue.Len(); sqi++ {
 		task := (*sh.schedQueue)[sqi]
 		needRes := ResourceTable[task.taskType][sh.spt]
@@ -451,10 +459,11 @@ func (sh *scheduler) trySched() {
 
 			worker := sh.workers[wid]
 			taskAssigned := worker.taskCount()
-			taskTodo := len(windows[wnd].todo)
-			taskCount := taskAssigned + taskTodo
+			//taskToBeAssigned := len(windows[wnd].todo)
+			taskToBeAssigned := getTaskToBeAssigned(wid)
+			taskCount := taskAssigned + taskToBeAssigned
 
-			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskTodo:%v, usePre:%v", wid, task.taskType, taskAssigned, taskTodo, sh.usePreWorkerP1P2)
+			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskTobeAssigned:%v, usePre:%v", wid, task.taskType, taskAssigned, taskToBeAssigned, sh.usePreWorkerP1P2)
 
 			if sh.usePreWorkerP1P2 {
 				if task.taskType == sealtasks.TTPreCommit1 || task.taskType == sealtasks.TTPreCommit2 {
@@ -489,6 +498,7 @@ func (sh *scheduler) trySched() {
 			//  without additional network roundtrips (O(n^2) could be avoided by turning acceptableWindows.[] into heaps))
 
 			selectedWindow = wnd
+			taskToBeAssignedCount[wid]++
 			break
 		}
 

@@ -90,7 +90,7 @@ func (m *Sealing) RunPledgeSectors(ctx context.Context) error {
 		case <-timer.C:
 			cfg, err := m.getConfig()
 			if err != nil || !cfg.AutoPledgeSector {
-				log.Infof("%c, conf: %+v", err, cfg)
+				log.Infof("%v, conf: %+v", err, cfg)
 				break
 			}
 			for m.sealer.CanAddPiece() {
