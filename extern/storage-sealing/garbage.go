@@ -90,6 +90,7 @@ func (m *Sealing) RunPledgeSectors(ctx context.Context) error {
 		case <-timer.C:
 			cfg, err := m.getConfig()
 			if err != nil || !cfg.AutoPledgeSector {
+				log.Infof("%c, conf: %+v", err, cfg)
 				break
 			}
 			for m.sealer.CanAddPiece() {
@@ -102,6 +103,9 @@ func (m *Sealing) RunPledgeSectors(ctx context.Context) error {
 				case <-ctx.Done():
 					return nil
 				}
+			}
+			if cfg.AutoPledgeSectorInterval == 0 {
+				cfg.AutoPledgeSectorInterval = 10
 			}
 			timer.Reset(time.Minute * time.Duration(cfg.AutoPledgeSectorInterval))
 		case <-ctx.Done():

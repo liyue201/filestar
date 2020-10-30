@@ -708,6 +708,7 @@ func NewGetSealConfigFunc(r repo.LockedRepo) (dtypes.GetSealingConfigFunc, error
 				MaxSealingSectorsForDeals: cfg.Sealing.MaxSealingSectorsForDeals,
 				WaitDealsDelay:            time.Duration(cfg.Sealing.WaitDealsDelay),
 				AutoPledgeSector:          cfg.Sealing.AutoPledgeSector,
+				AutoPledgeSectorInterval:  cfg.Sealing.AutoPledgeSectorInterval,
 			}
 		})
 		return
