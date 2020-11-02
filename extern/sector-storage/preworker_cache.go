@@ -2,6 +2,7 @@ package sectorstorage
 
 import (
 	"encoding/json"
+	"github.com/filecoin-project/go-state-types/abi"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -33,7 +34,7 @@ func loadPreWorkerMap(preWorker *sync.Map) {
 		if err != nil {
 			continue
 		}
-		preWorker.Store(sectorId, v)
+		preWorker.Store(abi.SectorNumber(sectorId), v)
 	}
 }
 
@@ -49,8 +50,8 @@ func preWorkerSaveFunc(preWorker *sync.Map) func() {
 func savePreWorkerMap(preWorker *sync.Map) {
 	m := make(map[string]interface{})
 	preWorker.Range(func(key, value interface{}) bool {
-		v := strconv.FormatUint(key.(uint64), 10)
-		m[v] = value
+		v := key.(abi.SectorNumber)
+		m[v.String()] = value
 		return true
 	})
 	data, err := json.Marshal(m)
