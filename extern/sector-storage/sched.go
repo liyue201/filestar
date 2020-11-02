@@ -79,8 +79,9 @@ type scheduler struct {
 	closed   chan struct{}
 	testSync chan struct{} // used for testing
 
-	usePreWorkerP1P2 bool
-	sectorPreWorker  sync.Map
+	usePreWorkerP1P2    bool
+	sectorPreWorker     sync.Map
+	saveSectorPreWorker func()
 }
 
 type workerHandle struct {
@@ -152,7 +153,7 @@ type workerResponse struct {
 }
 
 func newScheduler(spt abi.RegisteredSealProof) *scheduler {
-	return &scheduler{
+	sh := &scheduler{
 		spt: spt,
 
 		nextWorker: 0,
@@ -173,6 +174,11 @@ func newScheduler(spt abi.RegisteredSealProof) *scheduler {
 		closing: make(chan struct{}),
 		closed:  make(chan struct{}),
 	}
+	if sh.usePreWorkerP1P2 {
+		loadPreWorkerMap(sh.sectorPreWorker)
+		sh.saveSectorPreWorker = preWorkerSaveFunc(sh.sectorPreWorker)
+	}
+	return sh
 }
 
 func (sh *scheduler) Schedule(ctx context.Context, sector abi.SectorID, taskType sealtasks.TaskType, sel WorkerSelector, prepare WorkerAction, work WorkerAction) error {
@@ -798,6 +804,7 @@ func (sh *scheduler) assignWorker(taskDone chan struct{}, wid WorkerID, w *worke
 		} else {
 			sh.sectorPreWorker.Delete(req.sector.Number)
 		}
+		sh.saveSectorPreWorker()
 	}
 	return nil
 }
