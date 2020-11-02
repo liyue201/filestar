@@ -16,7 +16,7 @@ func preWorkerCacheFile() string {
 	return minerPath + "/preworker"
 }
 
-func loadPreWorkerMap(preWorker sync.Map) {
+func loadPreWorkerMap(preWorker *sync.Map) {
 	filePath := preWorkerCacheFile()
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
@@ -36,7 +36,7 @@ func loadPreWorkerMap(preWorker sync.Map) {
 	}
 }
 
-func preWorkerSaveFunc(preWorker sync.Map) func() {
+func preWorkerSaveFunc(preWorker *sync.Map) func() {
 	mutex := sync.Mutex{}
 	return func() {
 		mutex.Lock()
@@ -45,7 +45,7 @@ func preWorkerSaveFunc(preWorker sync.Map) func() {
 	}
 }
 
-func savePreWorkerMap(preWorker sync.Map) {
+func savePreWorkerMap(preWorker *sync.Map) {
 	m := make(map[interface{}]interface{})
 	preWorker.Range(func(key, value interface{}) bool {
 		m[key] = value

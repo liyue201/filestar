@@ -175,8 +175,8 @@ func newScheduler(spt abi.RegisteredSealProof) *scheduler {
 		closed:  make(chan struct{}),
 	}
 	if sh.usePreWorkerP1P2 {
-		loadPreWorkerMap(sh.sectorPreWorker)
-		sh.saveSectorPreWorker = preWorkerSaveFunc(sh.sectorPreWorker)
+		loadPreWorkerMap(&sh.sectorPreWorker)
+		sh.saveSectorPreWorker = preWorkerSaveFunc(&sh.sectorPreWorker)
 	}
 	return sh
 }
