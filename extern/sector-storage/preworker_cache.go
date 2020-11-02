@@ -20,6 +20,7 @@ func loadPreWorkerMap(preWorker *sync.Map) {
 	filePath := preWorkerCacheFile()
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
+		log.Errorf("loadPreWorkerMap: %v, file:%v", err, filePath)
 		return
 	}
 	m := make(map[string]string)
@@ -46,15 +47,20 @@ func preWorkerSaveFunc(preWorker *sync.Map) func() {
 }
 
 func savePreWorkerMap(preWorker *sync.Map) {
-	m := make(map[interface{}]interface{})
+	m := make(map[string]interface{})
 	preWorker.Range(func(key, value interface{}) bool {
-		m[key] = value
+		v := strconv.FormatUint(key.(uint64), 10)
+		m[v] = value
 		return true
 	})
 	data, err := json.Marshal(m)
 	if err != nil {
+		log.Errorf("savePreWorkerMap: %v", err)
 		return
 	}
 	filePath := preWorkerCacheFile()
-	ioutil.WriteFile(filePath, data, 0666)
+	err = ioutil.WriteFile(filePath, data, 0666)
+	if err != nil {
+		log.Errorf("savePreWorkerMap: %v, file:%v", err, filePath)
+	}
 }
