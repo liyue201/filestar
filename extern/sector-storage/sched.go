@@ -27,6 +27,10 @@ var (
 	SchedWindows = 2
 )
 
+const (
+	WorkerUrlKey = "workerUrl"
+)
+
 func getPriority(ctx context.Context) int {
 	sp := ctx.Value(SchedPriorityKey)
 	if p, ok := sp.(int); ok {
@@ -74,12 +78,22 @@ type scheduler struct {
 	closing  chan struct{}
 	closed   chan struct{}
 	testSync chan struct{} // used for testing
+
+	usePreWorkerP1P2    bool
+	sectorPreWorker     sync.Map
+	saveSectorPreWorker func()
+
+	workerTaskCount map[WorkerID]map[sealtasks.TaskType]int
+	workerTaskMutex sync.Mutex
 }
 
 type workerHandle struct {
 	w Worker
 
-	info storiface.WorkerInfo
+	url string
+
+	info              storiface.WorkerInfo
+	supportedTaskType map[sealtasks.TaskType]struct{}
 
 	preparing *activeResources
 	active    *activeResources
@@ -141,7 +155,7 @@ type workerResponse struct {
 }
 
 func newScheduler(spt abi.RegisteredSealProof) *scheduler {
-	return &scheduler{
+	sh := &scheduler{
 		spt: spt,
 
 		nextWorker: 0,
@@ -159,9 +173,15 @@ func newScheduler(spt abi.RegisteredSealProof) *scheduler {
 
 		info: make(chan func(interface{})),
 
-		closing: make(chan struct{}),
-		closed:  make(chan struct{}),
+		closing:         make(chan struct{}),
+		closed:          make(chan struct{}),
+		workerTaskCount: make(map[WorkerID]map[sealtasks.TaskType]int),
 	}
+
+	loadPreWorkerMap(&sh.sectorPreWorker)
+	sh.saveSectorPreWorker = preWorkerSaveFunc(&sh.sectorPreWorker)
+
+	return sh
 }
 
 func (sh *scheduler) Schedule(ctx context.Context, sector abi.SectorID, taskType sealtasks.TaskType, sel WorkerSelector, prepare WorkerAction, work WorkerAction) error {
@@ -225,6 +245,8 @@ func (sh *scheduler) runSched() {
 	iw := time.After(InitWait)
 	var initialised bool
 
+	ticker := time.NewTicker(time.Minute * 5)
+
 	for {
 		var doSched bool
 
@@ -251,6 +273,8 @@ func (sh *scheduler) runSched() {
 		case <-iw:
 			initialised = true
 			iw = nil
+			doSched = true
+		case <-ticker.C:
 			doSched = true
 		case <-sh.closing:
 			sh.schedClose()
@@ -418,6 +442,26 @@ func (sh *scheduler) trySched() {
 	// Step 2
 	scheduled := 0
 
+	//taskToBeAssignedCount := make(map[WorkerID]map[sealtasks.TaskType]int)
+	//
+	//getTaskToBeAssigned := func(wid WorkerID, taskType sealtasks.TaskType) int {
+	//	if m2, ok := taskToBeAssignedCount[wid]; ok {
+	//		if count, ok2 := m2[taskType]; ok2 {
+	//			return count
+	//		}
+	//	}
+	//	return 0
+	//}
+	//incTaskToBeAssigned := func(wid WorkerID, taskType sealtasks.TaskType) {
+	//	if m2, ok := taskToBeAssignedCount[wid]; ok {
+	//		m2[taskType]++
+	//	} else {
+	//		m2 = make(map[sealtasks.TaskType]int)
+	//		m2[taskType]++
+	//		taskToBeAssignedCount[wid] = m2
+	//	}
+	//}
+
 	for sqi := 0; sqi < sh.schedQueue.Len(); sqi++ {
 		task := (*sh.schedQueue)[sqi]
 		needRes := ResourceTable[task.taskType][sh.spt]
@@ -434,6 +478,22 @@ func (sh *scheduler) trySched() {
 				continue
 			}
 
+			worker := sh.workers[wid]
+			worker.updateInfo()
+			taskAssigned := sh.getWorkerTaskCount(wid, task.taskType)
+			taskToBeAssigned := 0 //getTaskToBeAssigned(wid, task.taskType)
+			taskCount := taskAssigned + taskToBeAssigned
+			taskLimit := worker.taskLimitOf(task.taskType)
+
+			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskTobeAssigned:%v, taskLimit:%v, usePre:%v", wid, task.taskType, taskAssigned, taskToBeAssigned, taskLimit, sh.usePreWorkerP1P2)
+
+			if task.taskType == sealtasks.TTAddPiece || task.taskType == sealtasks.TTPreCommit1 || task.taskType == sealtasks.TTPreCommit2 || task.taskType == sealtasks.TTCommit2 {
+				if taskCount >= taskLimit {
+					log.Debugf("out of taskLimit: %v", taskLimit)
+					continue
+				}
+			}
+
 			log.Debugf("SCHED ASSIGNED sqi:%d sector %d task %s to window %d", sqi, task.sector.Number, task.taskType, wnd)
 
 			windows[wnd].allocated.add(wr, needRes)
@@ -443,6 +503,8 @@ func (sh *scheduler) trySched() {
 			//  without additional network roundtrips (O(n^2) could be avoided by turning acceptableWindows.[] into heaps))
 
 			selectedWindow = wnd
+			//incTaskToBeAssigned(wid, task.taskType)
+			sh.updateWorkerTaskCount(wid, task.taskType, 1)
 			break
 		}
 
@@ -729,6 +791,7 @@ func (sh *scheduler) assignWorker(taskDone chan struct{}, wid WorkerID, w *worke
 
 			return nil
 		})
+		sh.updateWorkerTaskCount(wid, req.taskType, -1)
 
 		sh.workersLk.Unlock()
 
@@ -738,6 +801,14 @@ func (sh *scheduler) assignWorker(taskDone chan struct{}, wid WorkerID, w *worke
 		}
 	}()
 
+	if sh.usePreWorkerP1P2 {
+		if req.taskType == sealtasks.TTAddPiece || req.taskType == sealtasks.TTPreCommit1 {
+			sh.sectorPreWorker.Store(req.sector.Number, w.url)
+		} else {
+			sh.sectorPreWorker.Delete(req.sector.Number)
+		}
+		sh.saveSectorPreWorker()
+	}
 	return nil
 }
 
@@ -842,4 +913,28 @@ func (sh *scheduler) Close(ctx context.Context) error {
 		return ctx.Err()
 	}
 	return nil
+}
+
+func (sh *scheduler) getWorkerTaskCount(wid WorkerID, taskType sealtasks.TaskType) int {
+	sh.workerTaskMutex.Lock()
+	defer sh.workerTaskMutex.Unlock()
+
+	if m, ok := sh.workerTaskCount[wid]; ok {
+		return m[taskType]
+	}
+	return 0
+}
+
+func (sh *scheduler) updateWorkerTaskCount(wid WorkerID, taskType sealtasks.TaskType, d int) int {
+	sh.workerTaskMutex.Lock()
+	defer sh.workerTaskMutex.Unlock()
+
+	if m, ok := sh.workerTaskCount[wid]; ok {
+		m[taskType] += d
+	} else {
+		m = make(map[sealtasks.TaskType]int)
+		m[taskType] += d
+		sh.workerTaskCount[wid] = m
+	}
+	return 0
 }

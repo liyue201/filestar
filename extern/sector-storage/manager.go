@@ -3,14 +3,14 @@ package sectorstorage
 import (
 	"context"
 	"errors"
-	"io"
-	"net/http"
-
+	"fmt"
 	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/mitchellh/go-homedir"
 	"golang.org/x/xerrors"
+	"io"
+	"net/http"
 
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/specs-storage/storage"
@@ -58,12 +58,15 @@ type SectorManager interface {
 	ffiwrapper.StorageSealer
 	storage.Prover
 	FaultTracker
+
+	CanAddPiece() bool
 }
 
 type WorkerID uint64
 
 type Manager struct {
 	scfg *ffiwrapper.Config
+	sc   SealerConfig
 
 	ls         stores.LocalStorage
 	storage    *stores.Remote
@@ -85,6 +88,15 @@ type SealerConfig struct {
 	AllowPreCommit2 bool
 	AllowCommit     bool
 	AllowUnseal     bool
+
+	// Use the previous worker in the p1 p2 phase
+	UsePreWorkerP1P2 bool
+
+	// Limit the task number of a worker
+	ApTaskLimit int
+	P1TaskLimit int
+	P2TaskLimit int
+	CTaskLimit  int
 }
 
 type StorageAuth http.Header
@@ -95,7 +107,7 @@ func New(ctx context.Context, ls stores.LocalStorage, si stores.SectorIndex, cfg
 		return nil, err
 	}
 
-	prover, err := ffiwrapper.New(&readonlyProvider{stor: lstor, index: si, spt: cfg.SealProofType}, cfg)
+	prover, err := ffiwrapper.New(&readonlyProvider{stor: lstor, index: si}, cfg)
 	if err != nil {
 		return nil, xerrors.Errorf("creating prover instance: %w", err)
 	}
@@ -103,8 +115,8 @@ func New(ctx context.Context, ls stores.LocalStorage, si stores.SectorIndex, cfg
 	stor := stores.NewRemote(lstor, si, http.Header(sa), sc.ParallelFetchLimit)
 
 	m := &Manager{
-		scfg: cfg,
-
+		scfg:       cfg,
+		sc:         sc,
 		ls:         ls,
 		storage:    stor,
 		localStore: lstor,
@@ -115,6 +127,7 @@ func New(ctx context.Context, ls stores.LocalStorage, si stores.SectorIndex, cfg
 
 		Prover: prover,
 	}
+	m.sched.usePreWorkerP1P2 = sc.UsePreWorkerP1P2
 
 	go m.sched.runSched()
 
@@ -140,6 +153,14 @@ func New(ctx context.Context, ls stores.LocalStorage, si stores.SectorIndex, cfg
 	err = m.AddWorker(ctx, NewLocalWorker(WorkerConfig{
 		SealProof: cfg.SealProofType,
 		TaskTypes: localTasks,
+		GetSellerConfigFunc: func() storiface.SealerConfig {
+			return storiface.SealerConfig{
+				ApTaskLimit: sc.ApTaskLimit,
+				P1TaskLimit: sc.P1TaskLimit,
+				P2TaskLimit: sc.P2TaskLimit,
+				C2TaskLimit: sc.CTaskLimit,
+			}
+		},
 	}, stor, lstor, si))
 	if err != nil {
 		return nil, xerrors.Errorf("adding local worker: %w", err)
@@ -171,15 +192,26 @@ func (m *Manager) AddWorker(ctx context.Context, w Worker) error {
 	if err != nil {
 		return xerrors.Errorf("getting worker info: %w", err)
 	}
+	supportedTaskType, err := w.TaskTypes(ctx)
+	if err != nil {
+		return xerrors.Errorf("getting worker taskTypes: %w", err)
+	}
+
+	log.Infof("worker info: %+v", info)
+
+	url, _ := ctx.Value(WorkerUrlKey).(string)
 
 	m.sched.newWorkers <- &workerHandle{
-		w: w,
+		w:   w,
+		url: url,
 		wt: &workTracker{
 			running: map[uint64]storiface.WorkerJob{},
 		},
-		info:      info,
-		preparing: &activeResources{},
-		active:    &activeResources{},
+
+		info:              info,
+		supportedTaskType: supportedTaskType,
+		preparing:         &activeResources{},
+		active:            &activeResources{},
 	}
 	return nil
 }
@@ -339,7 +371,14 @@ func (m *Manager) SealPreCommit1(ctx context.Context, sector abi.SectorID, ticke
 
 	// TODO: also consider where the unsealed data sits
 
-	selector := newAllocSelector(m.index, stores.FTCache|stores.FTSealed, stores.PathSealing)
+	var selector WorkerSelector
+	preWorkerUrl, ok := m.sched.sectorPreWorker.Load(sector.Number)
+	if ok {
+		selector = newPreWorkSelector(preWorkerUrl.(string))
+	} else {
+		selector = newAllocSelector(m.index, stores.FTCache|stores.FTSealed, stores.PathSealing)
+	}
+	log.Infof("sectorId: %v, ok: %v, url: %v", sector.Number, ok, preWorkerUrl)
 
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTPreCommit1, selector, schedFetch(sector, stores.FTUnsealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 		p, err := w.SealPreCommit1(ctx, sector, ticket, pieces)
@@ -361,7 +400,14 @@ func (m *Manager) SealPreCommit2(ctx context.Context, sector abi.SectorID, phase
 		return storage.SectorCids{}, xerrors.Errorf("acquiring sector lock: %w", err)
 	}
 
-	selector := newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, true)
+	var selector WorkerSelector
+	preWorkerUrl, ok := m.sched.sectorPreWorker.Load(sector.Number)
+	if ok {
+		selector = newPreWorkSelector(preWorkerUrl.(string))
+	} else {
+		selector = newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, true)
+	}
+	log.Infof("sectorId: %v, ok: %v, url: %v", sector.Number, ok, preWorkerUrl)
 
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTPreCommit2, selector, schedFetch(sector, stores.FTCache|stores.FTSealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 		p, err := w.SealPreCommit2(ctx, sector, phase1Out)
@@ -516,6 +562,47 @@ func (m *Manager) SchedDiag(ctx context.Context) (interface{}, error) {
 
 func (m *Manager) Close(ctx context.Context) error {
 	return m.sched.Close(ctx)
+}
+
+func (m *Manager) CanAddPiece() bool {
+
+	m.sched.workersLk.RLock()
+	defer m.sched.workersLk.RUnlock()
+
+	taskTypes := []sealtasks.TaskType{sealtasks.TTAddPiece, sealtasks.TTPreCommit1, sealtasks.TTPreCommit2}
+	taskLimit := 0
+	taskCount := 0
+
+	for id, wh := range m.sched.workers {
+		wh.updateInfo()
+		limit := wh.taskLimitOf(sealtasks.TTAddPiece)
+		if limit <= 0 {
+			continue
+		}
+		limit += wh.taskLimitOf(sealtasks.TTPreCommit1)
+		limit += wh.taskLimitOf(sealtasks.TTPreCommit2)
+		count := wh.taskCountOf(taskTypes)
+		log.Infof("id: %v, hostname: %v,limit: %v, count: %v", id, wh.info.Hostname, limit, count)
+
+		taskLimit += limit
+		taskCount += count
+	}
+
+	//task in queue
+	taskInQueue := 0
+	strTaskInQueue := ""
+	for sqi := 0; sqi < m.sched.schedQueue.Len(); sqi++ {
+		task := (* m.sched.schedQueue)[sqi]
+		if taskContains(taskTypes, task.taskType) {
+			taskInQueue++
+			strTaskInQueue += fmt.Sprintf("%v %v|", task.sector.Number, task.taskType)
+		}
+	}
+
+	log.Infof("taskLimit:%v, taskCount:%v, taskInQueue: %v", taskLimit, taskCount, taskInQueue)
+	log.Infof("taskInQueue:|%v", strTaskInQueue)
+
+	return taskCount+taskInQueue < taskLimit
 }
 
 var _ SectorManager = &Manager{}

@@ -37,6 +37,10 @@ type StorageMiner struct {
 	Fees       MinerFeeConfig
 }
 
+type StorageWorker struct {
+	Storage sectorstorage.SealerConfig
+}
+
 type DealmakingConfig struct {
 	ConsiderOnlineStorageDeals    bool
 	ConsiderOfflineStorageDeals   bool
@@ -60,6 +64,11 @@ type SealingConfig struct {
 	MaxSealingSectorsForDeals uint64
 
 	WaitDealsDelay Duration
+
+	AutoPledgeSector bool
+
+	// in minute
+	AutoPledgeSectorInterval uint64
 }
 
 type MinerFeeConfig struct {
@@ -136,7 +145,7 @@ func defCommon() Common {
 		Pubsub: Pubsub{
 			Bootstrapper: false,
 			DirectPeers:  nil,
-			RemoteTracer: "",
+			RemoteTracer: "/dns4/pubsub-tracer.filecoin.io/tcp/4001/p2p/QmTd6UvR47vUidRNZ1ZKXHrAFhqTJAD27rKL9XYghEKgKX",
 		},
 	}
 
@@ -158,6 +167,8 @@ func DefaultStorageMiner() *StorageMiner {
 			MaxSealingSectors:         0,
 			MaxSealingSectorsForDeals: 0,
 			WaitDealsDelay:            Duration(time.Hour * 6),
+			AutoPledgeSector:          true,
+			AutoPledgeSectorInterval:  10,
 		},
 
 		Storage: sectorstorage.SealerConfig{
@@ -170,6 +181,11 @@ func DefaultStorageMiner() *StorageMiner {
 			// Default to 10 - tcp should still be able to figure this out, and
 			// it's the ratio between 10gbit / 1gbit
 			ParallelFetchLimit: 10,
+			UsePreWorkerP1P2:   true,
+			ApTaskLimit:        1,
+			P1TaskLimit:        1,
+			P2TaskLimit:        1,
+			CTaskLimit:         1,
 		},
 
 		Dealmaking: DealmakingConfig{
@@ -192,6 +208,28 @@ func DefaultStorageMiner() *StorageMiner {
 	}
 	cfg.Common.API.ListenAddress = "/ip4/127.0.0.1/tcp/2345/http"
 	cfg.Common.API.RemoteListenAddress = "127.0.0.1:2345"
+	return cfg
+}
+
+func DefaultStorageWorker() *StorageWorker {
+	cfg := &StorageWorker{
+
+		Storage: sectorstorage.SealerConfig{
+			AllowAddPiece:   true,
+			AllowPreCommit1: true,
+			AllowPreCommit2: true,
+			AllowCommit:     true,
+			AllowUnseal:     true,
+			// Default to 10 - tcp should still be able to figure this out, and
+			// it's the ratio between 10gbit / 1gbit
+			ParallelFetchLimit: 10,
+
+			ApTaskLimit: 1,
+			P1TaskLimit: 1,
+			P2TaskLimit: 1,
+			CTaskLimit:  1,
+		},
+	}
 	return cfg
 }
 

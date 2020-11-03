@@ -41,6 +41,10 @@ var infoCmd = &cli.Command{
 		fmt.Printf("CPUs: %d; GPUs: %v\n", info.Resources.CPUs, info.Resources.GPUs)
 		fmt.Printf("RAM: %s; Swap: %s\n", types.SizeStr(types.NewInt(info.Resources.MemPhysical)), types.SizeStr(types.NewInt(info.Resources.MemSwap)))
 		fmt.Printf("Reserved memory: %s\n", types.SizeStr(types.NewInt(info.Resources.MemReserved)))
+		fmt.Printf("Ap limit: %v\n", info.SellerConf.ApTaskLimit)
+		fmt.Printf("P1 limit: %v\n", info.SellerConf.P1TaskLimit)
+		fmt.Printf("P2 limit: %v\n", info.SellerConf.P2TaskLimit)
+		fmt.Printf("C limit: %v\n", info.SellerConf.C2TaskLimit)
 		fmt.Println()
 
 		paths, err := api.Paths(ctx)

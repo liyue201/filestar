@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/filecoin-project/lotus/extern/sector-storage/storiface"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -37,6 +39,7 @@ import (
 	"github.com/filecoin-project/lotus/lib/lotuslog"
 	"github.com/filecoin-project/lotus/lib/rpcenc"
 	"github.com/filecoin-project/lotus/metrics"
+	"github.com/filecoin-project/lotus/node/config"
 	"github.com/filecoin-project/lotus/node/repo"
 )
 
@@ -356,12 +359,12 @@ var runCmd = &cli.Command{
 		remote := stores.NewRemote(localStore, nodeApi, sminfo.AuthHeader(), cctx.Int("parallel-fetch-limit"))
 
 		// Create / expose the worker
-
 		workerApi := &worker{
 			LocalWorker: sectorstorage.NewLocalWorker(sectorstorage.WorkerConfig{
-				SealProof: spt,
-				TaskTypes: taskTypes,
-				NoSwap:    cctx.Bool("no-swap"),
+				SealProof:           spt,
+				TaskTypes:           taskTypes,
+				NoSwap:              cctx.Bool("no-swap"),
+				GetSellerConfigFunc: readSellerConfigFunc(lr),
 			}, remote, localStore, nodeApi),
 			localStore: localStore,
 			ls:         lr,
@@ -518,4 +521,43 @@ func extractRoutableIP(timeout time.Duration) (string, error) {
 	localAddr := conn.LocalAddr().(*net.TCPAddr)
 
 	return strings.Split(localAddr.IP.String(), ":")[0], nil
+}
+
+func readConfigFunc(lr repo.LockedRepo) func() *config.StorageWorker {
+	lastReadAt := time.Now()
+	var cacheConf *config.StorageWorker
+	mutex := sync.Mutex{}
+	return func() *config.StorageWorker {
+		mutex.Lock()
+		defer mutex.Unlock()
+
+		nowtime := time.Now()
+		if cacheConf != nil {
+			if lastReadAt.Add(time.Second * 3).After(nowtime) {
+				return cacheConf
+			}
+		}
+		conf, err := lr.Config()
+		if err != nil {
+			log.Infof("worker config error: %+v", err)
+			return config.DefaultStorageWorker()
+		}
+		log.Infof("worker config: %+v", conf)
+		lastReadAt = nowtime
+		cacheConf = conf.(*config.StorageWorker)
+		return cacheConf
+	}
+}
+
+func readSellerConfigFunc(lr repo.LockedRepo) func() storiface.SealerConfig {
+	f := readConfigFunc(lr)
+	return func() storiface.SealerConfig {
+		cfg := f().Storage
+		return storiface.SealerConfig{
+			ApTaskLimit: cfg.ApTaskLimit,
+			P1TaskLimit: cfg.P1TaskLimit,
+			P2TaskLimit: cfg.P2TaskLimit,
+			C2TaskLimit: cfg.CTaskLimit,
+		}
+	}
 }

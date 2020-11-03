@@ -8,9 +8,9 @@ import (
 )
 
 type WorkerInfo struct {
-	Hostname string
-
-	Resources WorkerResources
+	Hostname   string
+	SellerConf SealerConfig
+	Resources  WorkerResources
 }
 
 type WorkerResources struct {
@@ -39,4 +39,11 @@ type WorkerJob struct {
 
 	RunWait int // 0 - running, 1+ - assigned
 	Start   time.Time
+}
+
+type SealerConfig struct {
+	ApTaskLimit int
+	P1TaskLimit int
+	P2TaskLimit int
+	C2TaskLimit int
 }
