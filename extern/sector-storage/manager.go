@@ -3,6 +3,7 @@ package sectorstorage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
@@ -92,7 +93,11 @@ type SealerConfig struct {
 	UsePreWorkerP1P2 bool
 
 	// Limit the task number of a worker
-	TaskLimitPerWorker int
+	ApTaskLimit int
+	P1TaskLimit int
+	P2TaskLimit int
+	C1TaskLimit int
+	C2TaskLimit int
 }
 
 type StorageAuth http.Header
@@ -149,8 +154,14 @@ func New(ctx context.Context, ls stores.LocalStorage, si stores.SectorIndex, cfg
 	err = m.AddWorker(ctx, NewLocalWorker(WorkerConfig{
 		SealProof: cfg.SealProofType,
 		TaskTypes: localTasks,
-		GetTaskLimitFunc: func() int {
-			return sc.TaskLimitPerWorker
+		GetSellerConfigFunc: func() storiface.SealerConfig {
+			return storiface.SealerConfig{
+				ApTaskLimit: sc.ApTaskLimit,
+				P1TaskLimit: sc.P1TaskLimit,
+				P2TaskLimit: sc.P2TaskLimit,
+				C1TaskLimit: sc.C1TaskLimit,
+				C2TaskLimit: sc.C2TaskLimit,
+			}
 		},
 	}, stor, lstor, si))
 	if err != nil {
@@ -183,6 +194,10 @@ func (m *Manager) AddWorker(ctx context.Context, w Worker) error {
 	if err != nil {
 		return xerrors.Errorf("getting worker info: %w", err)
 	}
+	supportedTaskType, err := w.TaskTypes(ctx)
+	if err != nil {
+		return xerrors.Errorf("getting worker taskTypes: %w", err)
+	}
 
 	log.Infof("worker info: %+v", info)
 
@@ -195,10 +210,10 @@ func (m *Manager) AddWorker(ctx context.Context, w Worker) error {
 			running: map[uint64]storiface.WorkerJob{},
 		},
 
-		info:                     info,
-		preparing:                &activeResources{},
-		active:                   &activeResources{},
-		globalTaskLimitPerWorker: m.sc.TaskLimitPerWorker,
+		info:              info,
+		supportedTaskType: supportedTaskType,
+		preparing:         &activeResources{},
+		active:            &activeResources{},
 	}
 	return nil
 }
@@ -552,9 +567,44 @@ func (m *Manager) Close(ctx context.Context) error {
 }
 
 func (m *Manager) CanAddPiece() bool {
-	taskLimit, taskCount := m.taskCountAndLimitOf([]sealtasks.TaskType{sealtasks.TTAddPiece, sealtasks.TTPreCommit1, sealtasks.TTPreCommit2})
-	log.Infof("taskLimit:%v, taskCount:%v", taskLimit, taskCount)
-	return taskCount < taskLimit
+
+	m.sched.workersLk.RLock()
+	defer m.sched.workersLk.RUnlock()
+
+	taskTypes := []sealtasks.TaskType{sealtasks.TTAddPiece, sealtasks.TTPreCommit1, sealtasks.TTPreCommit2}
+	taskLimit := 0
+	taskCount := 0
+
+	for id, wh := range m.sched.workers {
+		wh.updateInfo()
+		limit := wh.taskLimitOf(sealtasks.TTAddPiece)
+		if limit <= 0 {
+			continue
+		}
+		limit += wh.taskLimitOf(sealtasks.TTPreCommit1)
+		limit += wh.taskLimitOf(sealtasks.TTPreCommit2)
+		count := wh.taskCountOf(taskTypes)
+		log.Infof("id: %v, hostname: %v,limit: %v, count: %v", id, wh.info.Hostname, limit, count)
+
+		taskLimit += limit
+		taskCount += count
+	}
+
+	//task in queue
+	taskInQueue := 0
+	strTaskInQueue := ""
+	for sqi := 0; sqi < m.sched.schedQueue.Len(); sqi++ {
+		task := (* m.sched.schedQueue)[sqi]
+		if taskContains(taskTypes, task.taskType) {
+			taskInQueue++
+			strTaskInQueue += fmt.Sprintf("%v %v|", task.sector.Number, task.taskType)
+		}
+	}
+
+	log.Infof("taskLimit:%v, taskCount:%v, taskInQueue: %v", taskLimit, taskCount, taskInQueue)
+	log.Infof("taskInQueue:|%v", strTaskInQueue)
+
+	return taskCount+taskInQueue < taskLimit
 }
 
 var _ SectorManager = &Manager{}

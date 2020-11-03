@@ -70,36 +70,6 @@ func taskContains(taskTypes []sealtasks.TaskType, taskType sealtasks.TaskType) b
 	return false
 }
 
-func (m *Manager) taskCountAndLimitOf(taskTypes []sealtasks.TaskType) (totalTaskLimit int, count int) {
-	jobm := m.WorkerJobs()
-	for _, jobs := range jobm {
-		for _, job := range jobs {
-			if taskContains(taskTypes, job.Task) {
-				count++
-			}
-		}
-	}
-
-	m.sched.workersLk.RLock()
-	defer m.sched.workersLk.RUnlock()
-
-	//task in queue
-	for sqi := 0; sqi < m.sched.schedQueue.Len(); sqi++ {
-		task := (* m.sched.schedQueue)[sqi]
-		if taskContains(taskTypes, task.taskType) {
-			count++
-		}
-	}
-
-	for id, wh := range m.sched.workers {
-		taskLimit := wh.taskLimitOf(taskTypes)
-		totalTaskLimit += taskLimit
-		log.Infof("id: %v,  limit: %v", id, taskLimit)
-	}
-
-	return
-}
-
 func (wh *workerHandle) taskCount() (count int) {
 	jobs := wh.wt.Running()
 	count = len(jobs)
@@ -134,24 +104,38 @@ func (wh *workerHandle) taskCountOf(taskTypes []sealtasks.TaskType) (count int) 
 	return
 }
 
-func (wh *workerHandle) taskLimitOf(taskTypes []sealtasks.TaskType) int {
-	supportedTasks, err := wh.w.TaskTypes(context.Background())
-	if err != nil {
+func (wh *workerHandle) taskLimitOf(taskType sealtasks.TaskType) int {
+	if wh.supportedTaskType == nil {
 		return 0
 	}
-	if taskIntersects(supportedTasks, taskTypes) {
-		return wh.taskLimit()
+	if _, ok := wh.supportedTaskType[taskType]; !ok {
+		return 0
+	}
+	switch taskType {
+	case sealtasks.TTAddPiece:
+		return wh.info.SellerConf.ApTaskLimit
+	case sealtasks.TTPreCommit1:
+		return wh.info.SellerConf.P1TaskLimit
+	case sealtasks.TTPreCommit2:
+		return wh.info.SellerConf.P2TaskLimit
+	case sealtasks.TTCommit1:
+		return wh.info.SellerConf.C1TaskLimit
+	case sealtasks.TTCommit2:
+		return wh.info.SellerConf.C2TaskLimit
 	}
 	return 0
 }
 
-func (wh *workerHandle) taskLimit() int {
+func (wh *workerHandle) updateInfo() {
+	wh.lk.Lock()
+	defer wh.lk.Unlock()
+
 	info, err := wh.w.Info(context.Background())
-	if err != nil {
-		return 0
+	if err == nil {
+		wh.info = info
 	}
-	if info.TaskLimit >= 0 {
-		return info.TaskLimit
+	taskTypes, err := wh.w.TaskTypes(context.Background())
+	if err == nil {
+		wh.supportedTaskType = taskTypes
 	}
-	return wh.globalTaskLimitPerWorker
 }

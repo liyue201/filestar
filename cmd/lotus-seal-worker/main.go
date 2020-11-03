@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/filecoin-project/lotus/extern/sector-storage/storiface"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -360,10 +361,10 @@ var runCmd = &cli.Command{
 		// Create / expose the worker
 		workerApi := &worker{
 			LocalWorker: sectorstorage.NewLocalWorker(sectorstorage.WorkerConfig{
-				SealProof:        spt,
-				TaskTypes:        taskTypes,
-				NoSwap:           cctx.Bool("no-swap"),
-				GetTaskLimitFunc: readTaskLimitFunc(lr),
+				SealProof:           spt,
+				TaskTypes:           taskTypes,
+				NoSwap:              cctx.Bool("no-swap"),
+				GetSellerConfigFunc: readSellerConfigFunc(lr),
 			}, remote, localStore, nodeApi),
 			localStore: localStore,
 			ls:         lr,
@@ -548,9 +549,16 @@ func readConfigFunc(lr repo.LockedRepo) func() *config.StorageWorker {
 	}
 }
 
-func readTaskLimitFunc(lr repo.LockedRepo) func() int {
+func readSellerConfigFunc(lr repo.LockedRepo) func() storiface.SealerConfig {
 	f := readConfigFunc(lr)
-	return func() int {
-		return f().Storage.TaskLimitPerWorker
+	return func() storiface.SealerConfig {
+		cfg := f().Storage
+		return storiface.SealerConfig{
+			ApTaskLimit: cfg.ApTaskLimit,
+			P1TaskLimit: cfg.P1TaskLimit,
+			P2TaskLimit: cfg.P2TaskLimit,
+			C1TaskLimit: cfg.C1TaskLimit,
+			C2TaskLimit: cfg.C2TaskLimit,
+		}
 	}
 }

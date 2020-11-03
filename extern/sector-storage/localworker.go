@@ -23,10 +23,10 @@ import (
 var pathTypes = []stores.SectorFileType{stores.FTUnsealed, stores.FTSealed, stores.FTCache}
 
 type WorkerConfig struct {
-	SealProof        abi.RegisteredSealProof
-	TaskTypes        []sealtasks.TaskType
-	NoSwap           bool
-	GetTaskLimitFunc func() int
+	SealProof           abi.RegisteredSealProof
+	TaskTypes           []sealtasks.TaskType
+	NoSwap              bool
+	GetSellerConfigFunc func() storiface.SealerConfig
 }
 
 type LocalWorker struct {
@@ -38,7 +38,7 @@ type LocalWorker struct {
 
 	acceptTasks map[sealtasks.TaskType]struct{}
 
-	getTaskLimitFunc func() int
+	getSellerConfigFunc func() storiface.SealerConfig
 }
 
 func NewLocalWorker(wcfg WorkerConfig, store stores.Store, local *stores.Local, sindex stores.SectorIndex) *LocalWorker {
@@ -56,8 +56,8 @@ func NewLocalWorker(wcfg WorkerConfig, store stores.Store, local *stores.Local, 
 		sindex:     sindex,
 		noSwap:     wcfg.NoSwap,
 
-		acceptTasks:      acceptTasks,
-		getTaskLimitFunc: wcfg.GetTaskLimitFunc,
+		acceptTasks:         acceptTasks,
+		getSellerConfigFunc: wcfg.GetSellerConfigFunc,
 	}
 }
 
@@ -303,7 +303,7 @@ func (l *LocalWorker) Info(context.Context) (storiface.WorkerInfo, error) {
 			CPUs:        uint64(runtime.NumCPU()),
 			GPUs:        gpus,
 		},
-		TaskLimit: l.getTaskLimitFunc(),
+		SellerConf: l.getSellerConfigFunc(),
 	}, nil
 }
 

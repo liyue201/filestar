@@ -182,7 +182,11 @@ func DefaultStorageMiner() *StorageMiner {
 			// it's the ratio between 10gbit / 1gbit
 			ParallelFetchLimit: 10,
 			UsePreWorkerP1P2:   true,
-			TaskLimitPerWorker: 3,
+			ApTaskLimit:        1,
+			P1TaskLimit:        1,
+			P2TaskLimit:        1,
+			C1TaskLimit:        1,
+			C2TaskLimit:        1,
 		},
 
 		Dealmaking: DealmakingConfig{
@@ -220,7 +224,12 @@ func DefaultStorageWorker() *StorageWorker {
 			// Default to 10 - tcp should still be able to figure this out, and
 			// it's the ratio between 10gbit / 1gbit
 			ParallelFetchLimit: 10,
-			TaskLimitPerWorker: 3,
+
+			ApTaskLimit: 1,
+			P1TaskLimit: 1,
+			P2TaskLimit: 1,
+			C1TaskLimit: 1,
+			C2TaskLimit: 1,
 		},
 	}
 	return cfg

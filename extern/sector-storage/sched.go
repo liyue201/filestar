@@ -89,7 +89,8 @@ type workerHandle struct {
 
 	url string
 
-	info storiface.WorkerInfo
+	info              storiface.WorkerInfo
+	supportedTaskType map[sealtasks.TaskType]struct{}
 
 	preparing *activeResources
 	active    *activeResources
@@ -98,8 +99,6 @@ type workerHandle struct {
 
 	wndLk         sync.Mutex
 	activeWindows []*schedWindow
-
-	globalTaskLimitPerWorker int
 
 	// stats / tracking
 	wt *workTracker
@@ -439,12 +438,24 @@ func (sh *scheduler) trySched() {
 	// Step 2
 	scheduled := 0
 
-	taskToBeAssignedCount := make(map[WorkerID]int)
-	getTaskToBeAssigned := func(wid WorkerID) int {
-		if count, ok := taskToBeAssignedCount[wid]; ok {
-			return count
+	taskToBeAssignedCount := make(map[WorkerID]map[sealtasks.TaskType]int)
+
+	getTaskToBeAssigned := func(wid WorkerID, taskType sealtasks.TaskType) int {
+		if m2, ok := taskToBeAssignedCount[wid]; ok {
+			if count, ok2 := m2[taskType]; ok2 {
+				return count
+			}
 		}
 		return 0
+	}
+	incTaskToBeAssigned := func(wid WorkerID, taskType sealtasks.TaskType) {
+		if m2, ok := taskToBeAssignedCount[wid]; ok {
+			m2[taskType]++
+		} else {
+			m2 = make(map[sealtasks.TaskType]int)
+			m2[taskType]++
+			taskToBeAssignedCount[wid] = m2
+		}
 	}
 
 	for sqi := 0; sqi < sh.schedQueue.Len(); sqi++ {
@@ -464,29 +475,13 @@ func (sh *scheduler) trySched() {
 			}
 
 			worker := sh.workers[wid]
-			taskAssigned := worker.taskCount()
-			//taskToBeAssigned := len(windows[wnd].todo)
-			taskToBeAssigned := getTaskToBeAssigned(wid)
+			worker.updateInfo()
+			taskAssigned := worker.taskCountOf([]sealtasks.TaskType{task.taskType})
+			taskToBeAssigned := getTaskToBeAssigned(wid, task.taskType)
 			taskCount := taskAssigned + taskToBeAssigned
-			taskLimit := worker.taskLimit()
+			taskLimit := worker.taskLimitOf(task.taskType)
 
 			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskTobeAssigned:%v, taskLimit:%v, usePre:%v", wid, task.taskType, taskAssigned, taskToBeAssigned, taskLimit, sh.usePreWorkerP1P2)
-
-			if sh.usePreWorkerP1P2 {
-				if task.taskType == sealtasks.TTPreCommit1 || task.taskType == sealtasks.TTPreCommit2 {
-					preWorkerUrl, ok := sh.sectorPreWorker.Load(task.sector.Number)
-					if !ok {
-						log.Debugf("can not found preWorkerUrl")
-					} else {
-						if preWorkerUrl != worker.url {
-							log.Debugf("preWorkerUrl not match: %v , %v", preWorkerUrl, worker.url)
-							continue
-						} else if taskLimit == 0 {
-							taskLimit = 1
-						}
-					}
-				}
-			}
 
 			if taskCount >= taskLimit {
 				log.Debugf("out of taskLimit: %v", taskLimit)
@@ -502,7 +497,7 @@ func (sh *scheduler) trySched() {
 			//  without additional network roundtrips (O(n^2) could be avoided by turning acceptableWindows.[] into heaps))
 
 			selectedWindow = wnd
-			taskToBeAssignedCount[wid]++
+			incTaskToBeAssigned(wid, task.taskType)
 			break
 		}
 
