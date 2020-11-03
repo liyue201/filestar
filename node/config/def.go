@@ -185,8 +185,7 @@ func DefaultStorageMiner() *StorageMiner {
 			ApTaskLimit:        1,
 			P1TaskLimit:        1,
 			P2TaskLimit:        1,
-			C1TaskLimit:        1,
-			C2TaskLimit:        1,
+			CTaskLimit:         1,
 		},
 
 		Dealmaking: DealmakingConfig{
@@ -228,8 +227,7 @@ func DefaultStorageWorker() *StorageWorker {
 			ApTaskLimit: 1,
 			P1TaskLimit: 1,
 			P2TaskLimit: 1,
-			C1TaskLimit: 1,
-			C2TaskLimit: 1,
+			CTaskLimit:  1,
 		},
 	}
 	return cfg

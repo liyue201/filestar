@@ -118,8 +118,6 @@ func (wh *workerHandle) taskLimitOf(taskType sealtasks.TaskType) int {
 		return wh.info.SellerConf.P1TaskLimit
 	case sealtasks.TTPreCommit2:
 		return wh.info.SellerConf.P2TaskLimit
-	case sealtasks.TTCommit1:
-		return wh.info.SellerConf.C1TaskLimit
 	case sealtasks.TTCommit2:
 		return wh.info.SellerConf.C2TaskLimit
 	}

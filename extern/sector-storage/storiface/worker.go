@@ -45,6 +45,5 @@ type SealerConfig struct {
 	ApTaskLimit int
 	P1TaskLimit int
 	P2TaskLimit int
-	C1TaskLimit int
 	C2TaskLimit int
 }

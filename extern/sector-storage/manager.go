@@ -96,8 +96,7 @@ type SealerConfig struct {
 	ApTaskLimit int
 	P1TaskLimit int
 	P2TaskLimit int
-	C1TaskLimit int
-	C2TaskLimit int
+	CTaskLimit  int
 }
 
 type StorageAuth http.Header
@@ -159,8 +158,7 @@ func New(ctx context.Context, ls stores.LocalStorage, si stores.SectorIndex, cfg
 				ApTaskLimit: sc.ApTaskLimit,
 				P1TaskLimit: sc.P1TaskLimit,
 				P2TaskLimit: sc.P2TaskLimit,
-				C1TaskLimit: sc.C1TaskLimit,
-				C2TaskLimit: sc.C2TaskLimit,
+				C2TaskLimit: sc.CTaskLimit,
 			}
 		},
 	}, stor, lstor, si))

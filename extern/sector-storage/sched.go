@@ -487,9 +487,11 @@ func (sh *scheduler) trySched() {
 
 			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskTobeAssigned:%v, taskLimit:%v, usePre:%v", wid, task.taskType, taskAssigned, taskToBeAssigned, taskLimit, sh.usePreWorkerP1P2)
 
-			if taskCount >= taskLimit {
-				log.Debugf("out of taskLimit: %v", taskLimit)
-				continue
+			if task.taskType == sealtasks.TTAddPiece || task.taskType == sealtasks.TTPreCommit1 || task.taskType == sealtasks.TTPreCommit2 || task.taskType == sealtasks.TTCommit2 {
+				if taskCount >= taskLimit {
+					log.Debugf("out of taskLimit: %v", taskLimit)
+					continue
+				}
 			}
 
 			log.Debugf("SCHED ASSIGNED sqi:%d sector %d task %s to window %d", sqi, task.sector.Number, task.taskType, wnd)

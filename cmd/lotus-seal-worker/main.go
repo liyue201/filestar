@@ -557,8 +557,7 @@ func readSellerConfigFunc(lr repo.LockedRepo) func() storiface.SealerConfig {
 			ApTaskLimit: cfg.ApTaskLimit,
 			P1TaskLimit: cfg.P1TaskLimit,
 			P2TaskLimit: cfg.P2TaskLimit,
-			C1TaskLimit: cfg.C1TaskLimit,
-			C2TaskLimit: cfg.C2TaskLimit,
+			C2TaskLimit: cfg.CTaskLimit,
 		}
 	}
 }

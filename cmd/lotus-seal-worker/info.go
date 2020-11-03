@@ -44,8 +44,7 @@ var infoCmd = &cli.Command{
 		fmt.Printf("Ap limit: %v\n", info.SellerConf.ApTaskLimit)
 		fmt.Printf("P1 limit: %v\n", info.SellerConf.P1TaskLimit)
 		fmt.Printf("P2 limit: %v\n", info.SellerConf.P2TaskLimit)
-		fmt.Printf("C1 limit: %v\n", info.SellerConf.C1TaskLimit)
-		fmt.Printf("C2 limit: %v\n", info.SellerConf.C2TaskLimit)
+		fmt.Printf("C limit: %v\n", info.SellerConf.C2TaskLimit)
 		fmt.Println()
 
 		paths, err := api.Paths(ctx)
