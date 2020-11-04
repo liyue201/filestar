@@ -100,7 +100,7 @@ func (m *Sealing) RunPledgeSectors(ctx context.Context) error {
 				log.Infof("getConfig: %v", err)
 				break
 			}
-			log.Infof("AutoPledgeSectorInterval=%v, count=%v", cfg.AutoPledgeSectorInterval, count)
+			//log.Infof("AutoPledgeSectorInterval=%v, count=%v", cfg.AutoPledgeSectorInterval, count)
 
 			if cfg.AutoPledgeSectorInterval == 0 {
 				count = 0
