@@ -88,13 +88,19 @@ func (m *Sealing) PledgeSector() error {
 }
 
 func (m *Sealing) RunPledgeSectors(ctx context.Context) error {
-	timer := time.NewTimer(time.Minute)
+
+	ticker := time.NewTicker(time.Minute)
+	count := uint64(0)
 	for {
 		select {
-		case <-timer.C:
+		case <-ticker.C:
+			count++
 			cfg, err := m.getConfig()
 			if err != nil || !cfg.AutoPledgeSector {
 				log.Infof("%v, conf: %+v", err, cfg)
+				break
+			}
+			if count < cfg.AutoPledgeSectorInterval {
 				break
 			}
 			for {
@@ -108,10 +114,7 @@ func (m *Sealing) RunPledgeSectors(ctx context.Context) error {
 					return nil
 				}
 			}
-			if cfg.AutoPledgeSectorInterval == 0 {
-				cfg.AutoPledgeSectorInterval = 10
-			}
-			timer.Reset(time.Minute * time.Duration(cfg.AutoPledgeSectorInterval))
+			count = 0
 		case <-ctx.Done():
 			return nil
 		}
