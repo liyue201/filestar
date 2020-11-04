@@ -65,8 +65,6 @@ type SealingConfig struct {
 
 	WaitDealsDelay Duration
 
-	AutoPledgeSector bool
-
 	// in minute
 	AutoPledgeSectorInterval uint64
 }
@@ -167,8 +165,7 @@ func DefaultStorageMiner() *StorageMiner {
 			MaxSealingSectors:         0,
 			MaxSealingSectorsForDeals: 0,
 			WaitDealsDelay:            Duration(time.Hour * 6),
-			AutoPledgeSector:          true,
-			AutoPledgeSectorInterval:  10,
+			AutoPledgeSectorInterval:  0,
 		},
 
 		Storage: sectorstorage.SealerConfig{
