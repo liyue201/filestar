@@ -89,31 +89,27 @@ func (m *Sealing) PledgeSector() error {
 
 func (m *Sealing) RunPledgeSectors(ctx context.Context) error {
 
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(time.Second)
 	count := uint64(0)
 	for {
 		select {
 		case <-ticker.C:
 			count++
 			cfg, err := m.getConfig()
-			if err != nil || !cfg.AutoPledgeSector {
-				log.Infof("%v, conf: %+v", err, cfg)
+			if err != nil {
+				log.Infof("getConfig: %v", err)
+				break
+			}
+			log.Infof("AutoPledgeSectorInterval=%v, count=%v", cfg.AutoPledgeSectorInterval, count)
+
+			if cfg.AutoPledgeSectorInterval == 0 {
+				count = 0
 				break
 			}
 			if count < cfg.AutoPledgeSectorInterval {
 				break
 			}
-			for {
-				if err := m.PledgeSector(); err != nil {
-					break
-				}
-				wait := time.After(time.Second * 5)
-				select {
-				case <-wait:
-				case <-ctx.Done():
-					return nil
-				}
-			}
+			m.PledgeSector()
 			count = 0
 		case <-ctx.Done():
 			return nil
