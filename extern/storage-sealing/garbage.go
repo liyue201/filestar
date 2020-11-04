@@ -96,11 +96,14 @@ func (m *Sealing) RunPledgeSectors(ctx context.Context) error {
 		case <-ticker.C:
 			count++
 			cfg, err := m.getConfig()
-			if err != nil || !cfg.AutoPledgeSector {
-				log.Infof("%v, conf: %+v", err, cfg)
+			if err != nil {
+				log.Infof("getConfig: %v", err)
 				break
 			}
-			if count < cfg.AutoPledgeSectorInterval {
+			log.Infof("AutoPledgeSectorInterval=", cfg.AutoPledgeSectorInterval)
+
+			if cfg.AutoPledgeSectorInterval == 0 || count < cfg.AutoPledgeSectorInterval {
+				count = 0
 				break
 			}
 			m.PledgeSector()
