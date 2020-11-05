@@ -27,10 +27,6 @@ var (
 	SchedWindows = 2
 )
 
-const (
-	WorkerUrlKey = "workerUrl"
-)
-
 func getPriority(ctx context.Context) int {
 	sp := ctx.Value(SchedPriorityKey)
 	if p, ok := sp.(int); ok {
@@ -80,8 +76,6 @@ type scheduler struct {
 	testSync chan struct{} // used for testing
 
 	usePreWorkerP1P2    bool
-	sectorPreWorker     sync.Map
-	saveSectorPreWorker func()
 
 	workerTaskCount map[WorkerID]map[sealtasks.TaskType]int
 	workerTaskMutex sync.Mutex
@@ -89,8 +83,6 @@ type scheduler struct {
 
 type workerHandle struct {
 	w Worker
-
-	url string
 
 	info              storiface.WorkerInfo
 	supportedTaskType map[sealtasks.TaskType]struct{}
@@ -177,9 +169,6 @@ func newScheduler(spt abi.RegisteredSealProof) *scheduler {
 		closed:          make(chan struct{}),
 		workerTaskCount: make(map[WorkerID]map[sealtasks.TaskType]int),
 	}
-
-	loadPreWorkerMap(&sh.sectorPreWorker)
-	sh.saveSectorPreWorker = preWorkerSaveFunc(&sh.sectorPreWorker)
 
 	return sh
 }
@@ -777,15 +766,6 @@ func (sh *scheduler) assignWorker(taskDone chan struct{}, wid WorkerID, w *worke
 			log.Errorf("error executing worker (withResources): %+v", err)
 		}
 	}()
-
-	if sh.usePreWorkerP1P2 {
-		if req.taskType == sealtasks.TTAddPiece || req.taskType == sealtasks.TTPreCommit1 {
-			sh.sectorPreWorker.Store(req.sector.Number, w.url)
-		} else {
-			sh.sectorPreWorker.Delete(req.sector.Number)
-		}
-		sh.saveSectorPreWorker()
-	}
 	return nil
 }
 
