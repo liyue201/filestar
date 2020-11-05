@@ -442,26 +442,6 @@ func (sh *scheduler) trySched() {
 	// Step 2
 	scheduled := 0
 
-	//taskToBeAssignedCount := make(map[WorkerID]map[sealtasks.TaskType]int)
-	//
-	//getTaskToBeAssigned := func(wid WorkerID, taskType sealtasks.TaskType) int {
-	//	if m2, ok := taskToBeAssignedCount[wid]; ok {
-	//		if count, ok2 := m2[taskType]; ok2 {
-	//			return count
-	//		}
-	//	}
-	//	return 0
-	//}
-	//incTaskToBeAssigned := func(wid WorkerID, taskType sealtasks.TaskType) {
-	//	if m2, ok := taskToBeAssignedCount[wid]; ok {
-	//		m2[taskType]++
-	//	} else {
-	//		m2 = make(map[sealtasks.TaskType]int)
-	//		m2[taskType]++
-	//		taskToBeAssignedCount[wid] = m2
-	//	}
-	//}
-
 	for sqi := 0; sqi < sh.schedQueue.Len(); sqi++ {
 		task := (*sh.schedQueue)[sqi]
 		needRes := ResourceTable[task.taskType][sh.spt]
@@ -481,15 +461,13 @@ func (sh *scheduler) trySched() {
 			worker := sh.workers[wid]
 			worker.updateInfo()
 			taskAssigned := sh.getWorkerTaskCount(wid, task.taskType)
-			taskToBeAssigned := 0 //getTaskToBeAssigned(wid, task.taskType)
-			taskCount := taskAssigned + taskToBeAssigned
 			taskLimit := worker.taskLimitOf(task.taskType)
 
-			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskTobeAssigned:%v, taskLimit:%v, usePre:%v", wid, task.taskType, taskAssigned, taskToBeAssigned, taskLimit, sh.usePreWorkerP1P2)
+			// log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v,taskLimit:%v, usePre:%v", wid, task.taskType, taskAssigned, taskLimit, sh.usePreWorkerP1P2)
 
 			if task.taskType == sealtasks.TTAddPiece || task.taskType == sealtasks.TTPreCommit1 || task.taskType == sealtasks.TTPreCommit2 || task.taskType == sealtasks.TTCommit2 {
-				if taskCount >= taskLimit {
-					log.Debugf("out of taskLimit: %v", taskLimit)
+				if taskAssigned >= taskLimit {
+					log.Debugf("out of taskLimit, workerId=%v, assigned=%v, limit=%v", wid, taskAssigned, taskLimit)
 					continue
 				}
 			}
@@ -503,7 +481,6 @@ func (sh *scheduler) trySched() {
 			//  without additional network roundtrips (O(n^2) could be avoided by turning acceptableWindows.[] into heaps))
 
 			selectedWindow = wnd
-			//incTaskToBeAssigned(wid, task.taskType)
 			sh.updateWorkerTaskCount(wid, task.taskType, 1)
 			break
 		}

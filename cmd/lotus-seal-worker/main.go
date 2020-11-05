@@ -542,7 +542,7 @@ func readConfigFunc(lr repo.LockedRepo) func() *config.StorageWorker {
 			log.Infof("worker config error: %+v", err)
 			return config.DefaultStorageWorker()
 		}
-		log.Infof("worker config: %+v", conf)
+		//log.Infof("worker config: %+v", conf)
 		lastReadAt = nowtime
 		cacheConf = conf.(*config.StorageWorker)
 		return cacheConf

@@ -374,7 +374,7 @@ func (m *Manager) SealPreCommit1(ctx context.Context, sector abi.SectorID, ticke
 	var selector WorkerSelector
 	preWorkerUrl, ok := m.sched.sectorPreWorker.Load(sector.Number)
 	if ok {
-		selector = newPreWorkSelector(preWorkerUrl.(string))
+		selector = newPreWorkerSelector(preWorkerUrl.(string))
 	} else {
 		selector = newAllocSelector(m.index, stores.FTCache|stores.FTSealed, stores.PathSealing)
 	}
@@ -403,7 +403,7 @@ func (m *Manager) SealPreCommit2(ctx context.Context, sector abi.SectorID, phase
 	var selector WorkerSelector
 	preWorkerUrl, ok := m.sched.sectorPreWorker.Load(sector.Number)
 	if ok {
-		selector = newPreWorkSelector(preWorkerUrl.(string))
+		selector = newPreWorkerSelector(preWorkerUrl.(string))
 	} else {
 		selector = newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, true)
 	}
@@ -573,7 +573,7 @@ func (m *Manager) CanAddPiece() bool {
 	taskLimit := 0
 	taskCount := 0
 
-	for id, wh := range m.sched.workers {
+	for _, wh := range m.sched.workers {
 		wh.updateInfo()
 		limit := wh.taskLimitOf(sealtasks.TTAddPiece)
 		if limit <= 0 {
@@ -582,7 +582,7 @@ func (m *Manager) CanAddPiece() bool {
 		limit += wh.taskLimitOf(sealtasks.TTPreCommit1)
 		limit += wh.taskLimitOf(sealtasks.TTPreCommit2)
 		count := wh.taskCountOf(taskTypes)
-		log.Infof("id: %v, hostname: %v,limit: %v, count: %v", id, wh.info.Hostname, limit, count)
+		//log.Debugf("id: %v, hostname: %v,limit: %v, count: %v", id, wh.info.Hostname, limit, count)
 
 		taskLimit += limit
 		taskCount += count
@@ -599,8 +599,8 @@ func (m *Manager) CanAddPiece() bool {
 		}
 	}
 
-	log.Infof("taskLimit:%v, taskCount:%v, taskInQueue: %v", taskLimit, taskCount, taskInQueue)
-	log.Infof("taskInQueue:|%v", strTaskInQueue)
+	log.Debugf("taskLimit:%v, taskCount:%v, taskInQueue: %v", taskLimit, taskCount, taskInQueue)
+	log.Debugf("taskInQueue:|%v", strTaskInQueue)
 
 	return taskCount+taskInQueue < taskLimit
 }

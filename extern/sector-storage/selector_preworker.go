@@ -10,7 +10,7 @@ type preWorkerSelector struct {
 	preWorkerUrl string
 }
 
-func newPreWorkSelector(preWorkerUrl string) *preWorkerSelector {
+func newPreWorkerSelector(preWorkerUrl string) *preWorkerSelector {
 	return &preWorkerSelector{
 		preWorkerUrl: preWorkerUrl,
 	}
