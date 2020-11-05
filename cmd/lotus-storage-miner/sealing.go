@@ -85,6 +85,9 @@ var sealingWorkersCmd = &cli.Command{
 
 			ramBarsRes := int(stat.Info.Resources.MemReserved * barCols / stat.Info.Resources.MemPhysical)
 			ramBarsUsed := int(stat.MemUsedMin * barCols / stat.Info.Resources.MemPhysical)
+			if ramBarsUsed+ramBarsRes > int(barCols) {
+				ramBarsUsed = int(barCols) - ramBarsRes
+			}
 			ramBar := color.YellowString(strings.Repeat("|", ramBarsRes)) +
 				color.GreenString(strings.Repeat("|", ramBarsUsed)) +
 				strings.Repeat(" ", int(barCols)-ramBarsUsed-ramBarsRes)
@@ -93,6 +96,10 @@ var sealingWorkersCmd = &cli.Command{
 
 			vmemBarsRes := int(stat.Info.Resources.MemReserved * barCols / vmem)
 			vmemBarsUsed := int(stat.MemUsedMax * barCols / vmem)
+			if vmemBarsUsed+vmemBarsRes > int(barCols) {
+				vmemBarsUsed = int(barCols) - vmemBarsRes
+			}
+
 			vmemBar := color.YellowString(strings.Repeat("|", vmemBarsRes)) +
 				color.GreenString(strings.Repeat("|", vmemBarsUsed)) +
 				strings.Repeat(" ", int(barCols)-vmemBarsUsed-vmemBarsRes)

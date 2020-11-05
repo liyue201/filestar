@@ -199,11 +199,8 @@ func (m *Manager) AddWorker(ctx context.Context, w Worker) error {
 
 	log.Infof("worker info: %+v", info)
 
-	url, _ := ctx.Value(WorkerUrlKey).(string)
-
 	m.sched.newWorkers <- &workerHandle{
 		w:   w,
-		url: url,
 		wt: &workTracker{
 			running: map[uint64]storiface.WorkerJob{},
 		},
@@ -257,7 +254,7 @@ func (m *Manager) tryReadUnsealedPiece(ctx context.Context, sink io.Writer, sect
 	if foundUnsealed { // append to existing
 		// There is unsealed sector, see if we can read from it
 
-		selector = newExistingSelector(m.index, sector, stores.FTUnsealed, false)
+		selector = newExistingSelector(m.index, sector, stores.FTUnsealed, stores.FTNone, stores.PathNone, false)
 
 		err = m.sched.Schedule(ctx, sector, sealtasks.TTReadUnsealed, selector, schedFetch(sector, stores.FTUnsealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 			readOk, err = w.ReadPiece(ctx, sink, sector, offset, size)
@@ -310,7 +307,7 @@ func (m *Manager) ReadPiece(ctx context.Context, sink io.Writer, sector abi.Sect
 		return err
 	}
 
-	selector = newExistingSelector(m.index, sector, stores.FTUnsealed, false)
+	selector = newExistingSelector(m.index, sector, stores.FTUnsealed, stores.FTNone, stores.PathNone, false)
 
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTReadUnsealed, selector, schedFetch(sector, stores.FTUnsealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 		readOk, err = w.ReadPiece(ctx, sink, sector, offset, size)
@@ -345,7 +342,7 @@ func (m *Manager) AddPiece(ctx context.Context, sector abi.SectorID, existingPie
 	if len(existingPieces) == 0 { // new
 		selector = newAllocSelector(m.index, stores.FTUnsealed, stores.PathSealing)
 	} else { // use existing
-		selector = newExistingSelector(m.index, sector, stores.FTUnsealed, false)
+		selector = newExistingSelector(m.index, sector, stores.FTUnsealed, stores.FTNone, stores.PathNone, false)
 	}
 
 	var out abi.PieceInfo
@@ -371,14 +368,7 @@ func (m *Manager) SealPreCommit1(ctx context.Context, sector abi.SectorID, ticke
 
 	// TODO: also consider where the unsealed data sits
 
-	var selector WorkerSelector
-	preWorkerUrl, ok := m.sched.sectorPreWorker.Load(sector.Number)
-	if ok {
-		selector = newPreWorkerSelector(preWorkerUrl.(string))
-	} else {
-		selector = newAllocSelector(m.index, stores.FTCache|stores.FTSealed, stores.PathSealing)
-	}
-	log.Infof("sectorId: %v, ok: %v, url: %v", sector.Number, ok, preWorkerUrl)
+	selector := newExistingSelector(m.index, sector, stores.FTUnsealed, stores.FTCache|stores.FTSealed, stores.PathSealing, !m.sc.UsePreWorkerP1P2)
 
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTPreCommit1, selector, schedFetch(sector, stores.FTUnsealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 		p, err := w.SealPreCommit1(ctx, sector, ticket, pieces)
@@ -400,14 +390,7 @@ func (m *Manager) SealPreCommit2(ctx context.Context, sector abi.SectorID, phase
 		return storage.SectorCids{}, xerrors.Errorf("acquiring sector lock: %w", err)
 	}
 
-	var selector WorkerSelector
-	preWorkerUrl, ok := m.sched.sectorPreWorker.Load(sector.Number)
-	if ok {
-		selector = newPreWorkerSelector(preWorkerUrl.(string))
-	} else {
-		selector = newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, true)
-	}
-	log.Infof("sectorId: %v, ok: %v, url: %v", sector.Number, ok, preWorkerUrl)
+	selector := newExistingSelector(m.index, sector, stores.FTUnsealed, stores.FTCache|stores.FTSealed, stores.PathSealing, !m.sc.UsePreWorkerP1P2)
 
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTPreCommit2, selector, schedFetch(sector, stores.FTCache|stores.FTSealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 		p, err := w.SealPreCommit2(ctx, sector, phase1Out)
@@ -431,7 +414,7 @@ func (m *Manager) SealCommit1(ctx context.Context, sector abi.SectorID, ticket a
 	// NOTE: We set allowFetch to false in so that we always execute on a worker
 	// with direct access to the data. We want to do that because this step is
 	// generally very cheap / fast, and transferring data is not worth the effort
-	selector := newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, false)
+	selector := newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, stores.FTNone, stores.PathNone, false)
 
 	err = m.sched.Schedule(ctx, sector, sealtasks.TTCommit1, selector, schedFetch(sector, stores.FTCache|stores.FTSealed, stores.PathSealing, stores.AcquireMove), func(ctx context.Context, w Worker) error {
 		p, err := w.SealCommit1(ctx, sector, ticket, seed, pieces, cids)
@@ -479,7 +462,7 @@ func (m *Manager) FinalizeSector(ctx context.Context, sector abi.SectorID, keepU
 		}
 	}
 
-	selector := newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, false)
+	selector := newExistingSelector(m.index, sector, stores.FTCache|stores.FTSealed, stores.FTNone, stores.PathNone, false)
 
 	err := m.sched.Schedule(ctx, sector, sealtasks.TTFinalize, selector,
 		schedFetch(sector, stores.FTCache|stores.FTSealed|unsealed, stores.PathSealing, stores.AcquireMove),
