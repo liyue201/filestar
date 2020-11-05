@@ -481,15 +481,13 @@ func (sh *scheduler) trySched() {
 			worker := sh.workers[wid]
 			worker.updateInfo()
 			taskAssigned := sh.getWorkerTaskCount(wid, task.taskType)
-			taskToBeAssigned := 0 //getTaskToBeAssigned(wid, task.taskType)
-			taskCount := taskAssigned + taskToBeAssigned
 			taskLimit := worker.taskLimitOf(task.taskType)
 
-			log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v, taskTobeAssigned:%v, taskLimit:%v, usePre:%v", wid, task.taskType, taskAssigned, taskToBeAssigned, taskLimit, sh.usePreWorkerP1P2)
+			// log.Debugf("SCHED wokerId:%v, type:%s, taskAssigned:%v,taskLimit:%v, usePre:%v", wid, task.taskType, taskAssigned, taskLimit, sh.usePreWorkerP1P2)
 
 			if task.taskType == sealtasks.TTAddPiece || task.taskType == sealtasks.TTPreCommit1 || task.taskType == sealtasks.TTPreCommit2 || task.taskType == sealtasks.TTCommit2 {
-				if taskCount >= taskLimit {
-					log.Debugf("out of taskLimit: %v", taskLimit)
+				if taskAssigned >= taskLimit {
+					log.Debugf("out of taskLimit, workerId=%v, assigned=%v, limit=%v", wid, taskAssigned, taskLimit)
 					continue
 				}
 			}
@@ -503,7 +501,6 @@ func (sh *scheduler) trySched() {
 			//  without additional network roundtrips (O(n^2) could be avoided by turning acceptableWindows.[] into heaps))
 
 			selectedWindow = wnd
-			//incTaskToBeAssigned(wid, task.taskType)
 			sh.updateWorkerTaskCount(wid, task.taskType, 1)
 			break
 		}

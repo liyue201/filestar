@@ -16,6 +16,6 @@ type Config struct {
 
 	WaitDealsDelay time.Duration
 
-	// in minute
+	// in second
 	AutoPledgeSectorInterval uint64
 }
