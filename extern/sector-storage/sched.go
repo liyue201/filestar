@@ -2,6 +2,7 @@ package sectorstorage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -75,10 +76,11 @@ type scheduler struct {
 	closed   chan struct{}
 	testSync chan struct{} // used for testing
 
-	usePreWorkerP1P2    bool
+	usePreWorkerP1P2 bool
 
 	workerTaskCount map[WorkerID]map[sealtasks.TaskType]int
 	workerTaskMutex sync.Mutex
+	removeTaskCh    chan abi.SectorNumber
 }
 
 type workerHandle struct {
@@ -168,6 +170,7 @@ func newScheduler(spt abi.RegisteredSealProof) *scheduler {
 		closing:         make(chan struct{}),
 		closed:          make(chan struct{}),
 		workerTaskCount: make(map[WorkerID]map[sealtasks.TaskType]int),
+		removeTaskCh:    make(chan abi.SectorNumber, 10),
 	}
 
 	return sh
@@ -265,6 +268,8 @@ func (sh *scheduler) runSched() {
 			doSched = true
 		case <-ticker.C:
 			doSched = true
+		case id := <-sh.removeTaskCh:
+			sh.doRemoveTask(id)
 		case <-sh.closing:
 			sh.schedClose()
 			return
@@ -894,4 +899,24 @@ func (sh *scheduler) updateWorkerTaskCount(wid WorkerID, taskType sealtasks.Task
 		sh.workerTaskCount[wid] = m
 	}
 	return 0
+}
+
+func (sh *scheduler) removeTask(id abi.SectorNumber) {
+	go func() {
+		sh.removeTaskCh <- id
+	}()
+}
+
+func (sh *scheduler) doRemoveTask(id abi.SectorNumber) {
+	for i := 0; i < sh.schedQueue.Len(); i++ {
+		task := (*sh.schedQueue)[i]
+		if task.sector.Number == id {
+			req := sh.schedQueue.Remove(i)
+			req.ret <- workerResponse{
+				err: errors.New("removed task from schedQueue"),
+			}
+			log.Debugf("removed task: task:%v, sector:%v", task.taskType, task.sector)
+			break
+		}
+	}
 }

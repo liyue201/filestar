@@ -60,6 +60,7 @@ type SectorManager interface {
 	FaultTracker
 
 	CanAddPiece() bool
+	RemoveTask(sid abi.SectorNumber)
 }
 
 type WorkerID uint64
@@ -586,6 +587,10 @@ func (m *Manager) CanAddPiece() bool {
 	log.Debugf("taskInQueue:|%v", strTaskInQueue)
 
 	return taskCount+taskInQueue < taskLimit
+}
+
+func (m *Manager) RemoveTask(id abi.SectorNumber) {
+	m.sched.removeTask(id)
 }
 
 var _ SectorManager = &Manager{}
