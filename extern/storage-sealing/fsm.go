@@ -427,7 +427,6 @@ func (m *Sealing) restartSectors(ctx context.Context) error {
 }
 
 func (m *Sealing) ForceSectorState(ctx context.Context, id abi.SectorNumber, state SectorState) error {
-	m.sealer.RemoveTask(id)
 	return m.sectors.Send(id, SectorForceState{state})
 }
 
