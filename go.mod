@@ -140,6 +140,7 @@ require (
 	gopkg.in/cheggaaa/pb.v1 v1.0.28
 	gotest.tools v2.2.0+incompatible
 	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
+	modernc.org/mathutil v1.1.1
 )
 
 replace github.com/filecoin-project/lotus => ./
