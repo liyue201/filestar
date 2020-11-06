@@ -231,6 +231,7 @@ func (m *Sealing) addPiece(ctx context.Context, sectorID abi.SectorNumber, size 
 }
 
 func (m *Sealing) Remove(ctx context.Context, sid abi.SectorNumber) error {
+	m.sealer.RemoveTask(sid)
 	return m.sectors.Send(uint64(sid), SectorRemove{})
 }
 
