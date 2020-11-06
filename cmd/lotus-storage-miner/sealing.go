@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"modernc.org/mathutil"
 	"os"
 	"sort"
 	"strings"
@@ -85,6 +86,9 @@ var sealingWorkersCmd = &cli.Command{
 
 			ramBarsRes := int(stat.Info.Resources.MemReserved * barCols / stat.Info.Resources.MemPhysical)
 			ramBarsUsed := int(stat.MemUsedMin * barCols / stat.Info.Resources.MemPhysical)
+
+			ramBarsRes = mathutil.Min(ramBarsRes, int(barCols))
+			ramBarsUsed = mathutil.Min(ramBarsUsed, int(barCols))
 			if ramBarsUsed+ramBarsRes > int(barCols) {
 				ramBarsUsed = int(barCols) - ramBarsRes
 			}
@@ -96,6 +100,9 @@ var sealingWorkersCmd = &cli.Command{
 
 			vmemBarsRes := int(stat.Info.Resources.MemReserved * barCols / vmem)
 			vmemBarsUsed := int(stat.MemUsedMax * barCols / vmem)
+			vmemBarsRes = mathutil.Min(vmemBarsRes, int(barCols))
+			vmemBarsUsed = mathutil.Min(vmemBarsUsed, int(barCols))
+
 			if vmemBarsUsed+vmemBarsRes > int(barCols) {
 				vmemBarsUsed = int(barCols) - vmemBarsRes
 			}
