@@ -130,6 +130,8 @@ func (wh *workerHandle) updateInfo() {
 
 	info, err := wh.w.Info(context.Background())
 	if err == nil {
+		res := wh.info.Resources
+		info.Resources = res
 		wh.info = info
 	}
 	taskTypes, err := wh.w.TaskTypes(context.Background())
