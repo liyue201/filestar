@@ -510,6 +510,9 @@ func (sh *scheduler) trySched() {
 		select {
 		case sh.openWindows[wnd].done <- &window:
 		default:
+			for _, task := range window.todo {
+				sh.updateWorkerTaskCount(sh.openWindows[wnd].worker, task.taskType, -1)
+			}
 			log.Error("expected sh.openWindows[wnd].done to be buffered")
 		}
 	}
