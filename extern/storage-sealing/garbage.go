@@ -2,7 +2,6 @@ package sealing
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"golang.org/x/xerrors"
@@ -43,9 +42,9 @@ func (m *Sealing) PledgeSector() error {
 			return xerrors.Errorf("too many sectors sealing (curSealing: %d, max: %d)", m.stats.curSealing(), cfg.MaxSealingSectors)
 		}
 	}
-	if !m.sealer.CanAddPiece() {
-		return errors.New("too many sectors sealing, out off task limit")
-	}
+	//if !m.sealer.CanAddPiece() {
+	//	return errors.New("too many sectors sealing, out off task limit")
+	//}
 
 	go func() {
 		ctx := context.TODO() // we can't use the context from command which invokes
