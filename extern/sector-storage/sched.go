@@ -713,6 +713,8 @@ func (sh *scheduler) assignWorker(taskDone chan struct{}, wid WorkerID, w *worke
 	w.lk.Unlock()
 
 	go func() {
+		defer sh.updateWorkerTaskCount(wid, req.taskType, -1)
+
 		err := req.prepare(req.ctx, w.wt.worker(w.w))
 		sh.workersLk.Lock()
 
@@ -762,7 +764,6 @@ func (sh *scheduler) assignWorker(taskDone chan struct{}, wid WorkerID, w *worke
 
 			return nil
 		})
-		sh.updateWorkerTaskCount(wid, req.taskType, -1)
 
 		sh.workersLk.Unlock()
 
