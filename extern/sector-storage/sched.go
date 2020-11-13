@@ -536,6 +536,7 @@ func (sh *scheduler) trySched() {
 			log.Error("expected sh.openWindows[wnd].done to be buffered")
 		}
 	}
+	
 
 	// Rewrite sh.openWindows array, removing scheduled windows
 	newOpenWindows := make([]*schedWindowRequest, 0, len(sh.openWindows)-len(scheduledWindows))
